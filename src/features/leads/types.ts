@@ -73,6 +73,20 @@ export interface LeadDetail {
     lostReason: string | null;
     lostNote: string | null;
   } | null;
+  /** How far the person got on the VSL, with what they answered and the call they booked. Null when they never came through the VSL. */
+  vsl: {
+    depth: "NONE" | "DETAILS" | "FORM" | "BOOKED";
+    score: number | null;
+    temperature: "HOT" | "WARM" | "COLD" | null;
+    forms: Array<{
+      formSlug: string;
+      score: number | null;
+      temperature: "HOT" | "WARM" | "COLD" | null;
+      submittedAt: string;
+      answers: Array<{ key: string; question: string; answer: string }>;
+    }>;
+    bookings: Array<{ slotStartAt: string; slotLabel: string; status: "CONFIRMED" | "COMPLETED" | "CANCELLED"; completedAt: string | null }>;
+  } | null;
   scoreEntries: Array<{ id: string; points: number; reason: string; at: string }>;
   events: Array<{ id: string; type: string; title: string; sub: string; at: string }>;
 }

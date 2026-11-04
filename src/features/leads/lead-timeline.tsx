@@ -14,6 +14,9 @@ type Filter = "all" | "stages" | "people" | "source";
 const KIND: Record<string, { icon: IconName; tone: string; group: Exclude<Filter, "all"> }> = {
   LEAD_CREATED: { icon: "plus", tone: "bg-surface-alt text-text-2", group: "source" },
   TOUCHPOINT_ADDED: { icon: "refresh", tone: "bg-info-soft text-info", group: "source" },
+  FORM_SUBMITTED: { icon: "note", tone: "bg-info-soft text-info", group: "source" },
+  SLOT_BOOKED: { icon: "calendar", tone: "bg-primary-soft text-primary", group: "stages" },
+  BOOKING_COMPLETED: { icon: "check", tone: "bg-ok-soft text-ok", group: "stages" },
   ASSIGNED: { icon: "user", tone: "bg-info-soft text-info", group: "people" },
   OPPORTUNITY_OPENED: { icon: "target", tone: "bg-primary-soft text-primary", group: "stages" },
   OPPORTUNITY_STAGE_CHANGED: { icon: "arrowR", tone: "bg-primary-soft text-primary", group: "stages" },
@@ -92,7 +95,7 @@ export function LeadTimeline({ events }: { events: Ev[] }) {
               <m.li key={g.label} layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.08 } }} className="flex flex-col">
                 <h3 className="sticky top-0 z-10 -mx-1 bg-bg/90 px-1 py-1.5 text-small font-semibold text-text-2 backdrop-blur">{g.label}</h3>
                 <ol className="relative flex flex-col">
-                  <span aria-hidden className="absolute top-3 bottom-3 left-[23px] w-px bg-border" />
+                  <span aria-hidden className="absolute top-6 bottom-6 left-[23px] w-0.5 rounded-full bg-border-strong" />
                   {g.items.map((e, i) => {
                     const k = kindOf(e.type);
                     return (
@@ -101,7 +104,7 @@ export function LeadTimeline({ events }: { events: Ev[] }) {
                         layout="position"
                         initial={{ opacity: 0, y: -8 }}
                         animate={{ opacity: 1, y: 0, transition: { ...fast, delay: Math.min(i, 6) * 0.035 } }}
-                        className="group/event relative flex gap-3 rounded-xl py-2 pr-3 pl-2 transition-colors duration-150 hover:bg-surface"
+                        className="group/event relative flex gap-3 rounded-xl py-3.5 pr-3 pl-2 transition-colors duration-150 hover:bg-surface"
                       >
                         <span className={cn("relative z-[1] flex size-8 shrink-0 items-center justify-center rounded-full ring-4 ring-bg transition-[transform,--tw-ring-color] group-hover/event:scale-105 group-hover/event:ring-surface", k.tone)}>
                           <Icon name={k.icon} size={14} />

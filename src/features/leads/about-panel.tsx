@@ -10,6 +10,7 @@ import { relativeTime } from "@/lib/format";
 import { fast } from "@/lib/motion";
 import { CopyButton } from "./copy-button";
 import { formatPhone } from "./lead-display";
+import { VslJourney } from "./vsl-journey";
 import type { LeadDetail } from "./types";
 
 const USER_TYPE = { WORKING_PROFESSIONAL: "Working professional", STUDENT: "Student", UNKNOWN: "Not known" } as const;
@@ -48,7 +49,7 @@ function Row({ label, children, copy, empty }: { label: string; children?: React
 }
 
 /** Everything known about the person: how to reach them, who owns them, what they told us. */
-export function AboutPanel({ lead }: { lead: LeadDetail["lead"] }) {
+export function AboutPanel({ lead, vsl }: { lead: LeadDetail["lead"]; vsl: LeadDetail["vsl"] }) {
   const profile: Array<[string, string | null]> = [
     ["Current company", lead.company],
     ["CTC range", lead.ctc],
@@ -67,6 +68,11 @@ export function AboutPanel({ lead }: { lead: LeadDetail["lead"] }) {
           {lead.email ? <a href={`mailto:${lead.email}`} className="text-primary hover:underline">{lead.email}</a> : "No email"}
         </Row>
       </Section>
+      {vsl ? (
+        <Section title="VSL journey">
+          <VslJourney vsl={vsl} />
+        </Section>
+      ) : null}
       <Section title="Ownership">
         <Row label="Owner" empty={!lead.owner}>
           {lead.owner ? <span className="flex items-center gap-2"><Avatar name={lead.owner.name} size={22} />{lead.owner.name}</span> : "Unassigned"}

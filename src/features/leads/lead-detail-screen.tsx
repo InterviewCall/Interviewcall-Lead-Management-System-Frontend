@@ -55,7 +55,7 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
   const [tab, setTab] = useState<Tab>("timeline");
   const [lostOpen, setLostOpen] = useState(false);
   const [winTarget, setWinTarget] = useState(false);
-  const { lead, opportunity, events, scoreEntries } = data;
+  const { lead, opportunity, events, scoreEntries, vsl } = data;
   const role = user?.role ?? "OPS";
   const editable = canMark(role);
   const busy = mark.contactStage.isPending || mark.moveStage.isPending || mark.lose.isPending || mark.reopen.isPending;
@@ -175,7 +175,7 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
         <m.aside initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0, transition: { ...fast, delay: 0.05 } }} className={cn("thin-scroll lg:w-[320px] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain xl:w-[340px]", tab === "details" ? "block" : "hidden lg:block")}>
-          <AboutPanel lead={lead} />
+          <AboutPanel lead={lead} vsl={vsl} />
         </m.aside>
 
         <m.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { ...fast, delay: 0.1 } }} className={cn("flex min-w-0 flex-1 flex-col lg:min-h-0", tab === "details" ? "hidden lg:flex" : "flex")}>

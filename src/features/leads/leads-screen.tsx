@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { IMPORT_ROLES } from "@/components/shell/nav";
+import { AssignLeadsModal, canDistribute } from "@/features/assignment/handover";
 import { useAuth } from "@/features/auth/auth-provider";
 import { errorMessage } from "@/lib/api/errors";
 import { cn } from "@/lib/cn";
@@ -59,6 +60,7 @@ export function LeadsScreen() {
   const [temperature, setTemperature] = useState<TemperatureCode | "">("");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [assignOpen, setAssignOpen] = useState(false);
   const filters = useLeadFilters();
   const canSeeOwners = user?.role !== "BDA";
   const newOpen = params.get("new") === "1";
@@ -115,6 +117,7 @@ export function LeadsScreen() {
           </>
         }
       />
+
 
       <div role="tablist" aria-label="Saved views" className="flex gap-6 overflow-x-auto border-b border-border">
         {VIEWS.map((v) => {
@@ -207,7 +210,10 @@ export function LeadsScreen() {
             className="flex min-h-12 flex-wrap items-center gap-3 overflow-hidden border-b border-border bg-primary-soft px-4"
           >
             <span className="text-body font-medium text-primary">{selected.size} selected</span>
-            {["Assign to…", "Change lifecycle", "Add task"].map((label) => (
+            {canDistribute(user?.role) ? (
+              <button type="button" onClick={() => setAssignOpen(true)} className="h-[30px] rounded-md bg-surface px-3 text-small font-medium text-text shadow-sm">Assign to…</button>
+            ) : null}
+            {["Change lifecycle", "Add task"].map((label) => (
               <button key={label} type="button" onClick={bulk} className="h-[30px] rounded-md bg-surface px-3 text-small font-medium text-text shadow-sm">{label}</button>
             ))}
             <span className="flex-1" />
@@ -222,10 +228,10 @@ export function LeadsScreen() {
           <>
             {/* Desktop table */}
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[1100px] border-collapse text-left">
+              <table className="w-full min-w-[980px] border-collapse text-left">
                 <thead>
                   <tr className="h-10 border-b border-border bg-surface-alt">
-                    <th className="w-12 px-3">
+                    <th className="w-10 px-3">
                       <input
                         type="checkbox"
                         aria-label="Select all on this page"
@@ -235,7 +241,7 @@ export function LeadsScreen() {
                       />
                     </th>
                     {["Lead", "Source", "Contact stage", "Pipeline stage", "Temp.", "Score", "Owner", "Next step"].map((h) => (
-                      <th key={h} className="px-3 text-cap font-semibold tracking-[0.5px] text-text-2 uppercase">{h}</th>
+                      <th key={h} className="px-2 text-cap font-semibold tracking-[0.5px] text-text-2 uppercase">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -252,7 +258,7 @@ export function LeadsScreen() {
                           <td className="px-3" onClick={(e) => e.stopPropagation()}>
                             <input type="checkbox" aria-label={`Select ${lead.name}`} checked={isSelected} onChange={() => toggle(lead.id)} className="size-[18px] accent-primary" />
                           </td>
-                          <td className="px-3">
+                          <td className="px-2">
                             <Link href={`/leads/${lead.id}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-2.5">
                               <Avatar name={lead.name} />
                               <span className="flex min-w-0 flex-col">
@@ -261,13 +267,13 @@ export function LeadsScreen() {
                               </span>
                             </Link>
                           </td>
-                          <td className="px-3 text-body whitespace-nowrap text-text-2">{lead.source}</td>
-                          <td className="px-3"><LifecycleChip code={lead.lifecycle} /></td>
-                          <td className="px-3"><StageChip code={lead.stage} /></td>
-                          <td className="px-3"><TempChip code={lead.temperature} /></td>
-                          <td className="px-3"><ScoreChip score={lead.score} /></td>
-                          <td className="px-3">{lead.owner ? <span className="flex items-center gap-2"><Avatar name={lead.owner.name} size={24} /><span className="truncate text-body text-text">{lead.owner.name}</span></span> : <span className="text-small text-muted">Unassigned</span>}</td>
-                          <td className="px-3"><NextStepText next={lead.next} /></td>
+                          <td className="px-2 text-body whitespace-nowrap text-text-2">{lead.source}</td>
+                          <td className="px-2"><LifecycleChip code={lead.lifecycle} /></td>
+                          <td className="px-2"><StageChip code={lead.stage} /></td>
+                          <td className="px-2"><TempChip code={lead.temperature} /></td>
+                          <td className="px-2"><ScoreChip score={lead.score} /></td>
+                          <td className="px-2">{lead.owner ? <span className="flex items-center gap-2"><Avatar name={lead.owner.name} size={24} /><span className="truncate text-body text-text">{lead.owner.name}</span></span> : <span className="text-small text-muted">Unassigned</span>}</td>
+                          <td className="px-2"><NextStepText next={lead.next} /></td>
                         </tr>
                       );
                     })
@@ -312,6 +318,7 @@ export function LeadsScreen() {
         </div>
       </Card>
 
+      {assignOpen ? <AssignLeadsModal leadIds={[...selected]} onClose={() => setAssignOpen(false)} onDone={() => { setAssignOpen(false); setSelected(new Set()); }} /> : null}
       <NewLeadModal open={newOpen} onClose={() => router.replace("/leads")} />
     </>
   );
