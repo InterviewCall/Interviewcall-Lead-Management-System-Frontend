@@ -1,5 +1,6 @@
 "use client";
 
+import { AnimatePresence, m } from "motion/react";
 import { useMemo, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Avatar } from "@/components/ui/avatar";
@@ -16,6 +17,7 @@ import { useAuth } from "@/features/auth/auth-provider";
 import { errorMessage } from "@/lib/api/errors";
 import { cn } from "@/lib/cn";
 import { formatNumber, relativeTime } from "@/lib/format";
+import { fast } from "@/lib/motion";
 import type { Tone } from "@/lib/roles";
 import { TEMP_TONE, type Temperature } from "@/mock/types";
 import { currentCursor, planShares, VSL_DEPTHS, type QueueQuery, type QueueTab, type VslDepth, type WaitBucket } from "./api";
@@ -36,6 +38,8 @@ export function AssignmentScreen() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Rows slide out only while an assignment is going through, not when you change a filter.
+  const [handingOut, setHandingOut] = useState(false);
 
   const query: QueueQuery = useMemo(() => ({ tab, source, depth, temperature, wait, limit }), [tab, source, depth, temperature, wait, limit]);
   const queue = useQueue(query);
@@ -72,6 +76,8 @@ export function AssignmentScreen() {
 
   function submit() {
     if (!canAssign) return;
+    setHandingOut(true);
+    setTimeout(() => setHandingOut(false), 2000);
     assign.mutate(
       { leadIds: [...selected], bdas: chosen, by: user?.name ?? "You" },
       {
@@ -137,8 +143,16 @@ export function AssignmentScreen() {
             </div>
           </div>
 
+          <AnimatePresence initial={false}>
           {selected.size > 0 ? (
-            <div className="flex h-11 items-center gap-3 border-b border-border bg-primary-soft px-4 text-body">
+            <m.div
+              key="selection-bar"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 44, opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={fast}
+              className="flex items-center gap-3 overflow-hidden border-b border-border bg-primary-soft px-4 text-body"
+            >
               <span className="font-medium text-primary">{selected.size} selected</span>
               {data && selected.size < data.total ? (
                 <button type="button" onClick={() => setSelected(new Set(data.matchingIds))} className="font-medium text-primary underline-offset-2 hover:underline">
@@ -147,8 +161,9 @@ export function AssignmentScreen() {
               ) : null}
               <span className="flex-1" />
               <button type="button" onClick={() => setSelected(new Set())} className="text-small font-medium text-primary">Clear</button>
-            </div>
+            </m.div>
           ) : null}
+          </AnimatePresence>
 
           {queue.isError ? (
             <div className="p-5"><Alert>{errorMessage(queue.error)}</Alert></div>
@@ -176,8 +191,14 @@ export function AssignmentScreen() {
                     <tr><td colSpan={6} className="py-14 text-center"><Spinner className="mx-auto text-primary" /></td></tr>
                   ) : rows.length === 0 ? (
                     <tr><td colSpan={6} className="py-14 text-center text-body text-text-2">The queue is empty. Nothing is waiting for an owner.</td></tr>
-                  ) : rows.map(({ lead, depth: d, waitingHours, subtitle }) => (
-                    <tr key={lead.id} className={cn("h-[60px] border-b border-border last:border-b-0", selected.has(lead.id) && "bg-primary-soft/60")}>
+                  ) : null}
+                  <AnimatePresence initial={false}>
+                  {queue.isPending || rows.length === 0 ? null : rows.map(({ lead, depth: d, waitingHours, subtitle }) => (
+                    <m.tr
+                      key={lead.id}
+                      exit={handingOut ? { opacity: 0, x: 24, transition: fast } : { opacity: 0, transition: { duration: 0 } }}
+                      className={cn("h-[60px] border-b border-border last:border-b-0 transition-colors", selected.has(lead.id) && "bg-primary-soft/60")}
+                    >
                       <td className="px-3"><input type="checkbox" aria-label={`Select ${lead.name}`} checked={selected.has(lead.id)} onChange={() => toggle(lead.id)} className="size-[18px] accent-primary" /></td>
                       <td className="px-3">
                         <span className="flex flex-col">
@@ -191,8 +212,9 @@ export function AssignmentScreen() {
                       <td className={cn("px-3 text-body whitespace-nowrap", waitingHours >= 24 ? "font-medium text-warn" : "text-text-2")}>
                         {waitingHours >= 24 ? `${Math.floor(waitingHours / 24)} d` : `${waitingHours} h`}
                       </td>
-                    </tr>
+                    </m.tr>
                   ))}
+                  </AnimatePresence>
                 </tbody>
               </table>
             </div>

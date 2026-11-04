@@ -101,3 +101,59 @@ input:-webkit-autofill:focus {
   -webkit-text-fill-color: var(--color-text);
   caret-color: var(--color-text);
 }
+
+/* Page and first-load entrances. Plain CSS: cheap, and switched off for reduced motion below. */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@utility anim-fade-up {
+  animation: fade-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* Opacity only. A transform animation, even one that ends at "none", makes the element the containing
+   block for position: fixed children, which pushed the lead page's bottom action bar out of place.
+   Use this one on anything that can contain fixed elements, such as the page content area. */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@utility anim-fade-in {
+  animation: fade-in 0.25s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .anim-fade-up, .anim-fade-in { animation: none; }
+}
+
+/* A soft light that slides across a progress bar while work is running. */
+@keyframes progress-sheen {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+.progress-sheen { position: relative; overflow: hidden; }
+.progress-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.5), transparent);
+  animation: progress-sheen 1.3s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-sheen::after { animation: none; }
+}
+
+/* Scrolling panes on the lead page: a slim scrollbar that only shows when there is something to scroll. */
+@utility thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+@keyframes soft-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(79 70 229 / 0.35); }
+  50% { box-shadow: 0 0 0 6px rgb(79 70 229 / 0); }
+}
+@utility anim-soft-pulse {
+  animation: soft-pulse 2.4s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .anim-soft-pulse { animation: none; }
+}

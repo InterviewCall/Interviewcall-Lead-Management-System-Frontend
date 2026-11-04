@@ -1,7 +1,9 @@
 "use client";
 
+import { AnimatePresence, m } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { fast } from "@/lib/motion";
 import { Icon, type IconName } from "./icon";
 
 export interface MenuItem {
@@ -45,8 +47,16 @@ export function RowMenu({ items, label }: { items: MenuItem[]; label: string }) 
       >
         <Icon name="more" size={16} />
       </button>
-      {open ? (
-        <div role="menu" className="absolute right-0 z-30 mt-1 w-52 overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-pop">
+      <AnimatePresence>
+        {open ? (
+        <m.div
+          role="menu"
+          style={{ transformOrigin: "top right" }}
+          initial={{ opacity: 0, scale: 0.95, y: -4 }}
+          animate={{ opacity: 1, scale: 1, y: 0, transition: fast }}
+          exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.1 } }}
+          className="absolute right-0 z-30 mt-1 w-52 overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-pop"
+        >
           {items.map((item) => (
             <button
               key={item.label}
@@ -66,13 +76,21 @@ export function RowMenu({ items, label }: { items: MenuItem[]; label: string }) 
               {item.label}
             </button>
           ))}
-        </div>
-      ) : null}
+        </m.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
 
-export function Popover({ trigger, children, up = false, className }: { trigger: (props: { open: boolean; toggle: () => void }) => ReactNode; children: ReactNode; up?: boolean; className?: string }) {
+export function Popover({ trigger, children, up = false, align = "right", className }: {
+  trigger: (props: { open: boolean; toggle: () => void }) => ReactNode;
+  /** Content, or a function that is given `close` so a choice can dismiss the popover. */
+  children: ReactNode | ((api: { close: () => void }) => ReactNode);
+  up?: boolean;
+  align?: "left" | "right";
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -80,17 +98,32 @@ export function Popover({ trigger, children, up = false, className }: { trigger:
     const onDown = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
     document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open]);
   return (
     <div ref={rootRef} className="relative">
       {trigger({ open, toggle: () => setOpen((v) => !v) })}
-      {open ? (
-        <div className={cn("absolute right-0 z-30 rounded-lg border border-border bg-surface shadow-pop", up ? "bottom-full mb-1" : "mt-1", className)}>
-          {children}
-        </div>
-      ) : null}
+      <AnimatePresence>
+        {open ? (
+          <m.div
+            style={{ transformOrigin: `${up ? "bottom" : "top"} ${align}` }}
+            initial={{ opacity: 0, scale: 0.95, y: up ? 4 : -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0, transition: fast }}
+            exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.1 } }}
+            className={cn("absolute z-40 rounded-lg border border-border bg-surface shadow-pop", align === "right" ? "right-0" : "left-0", up ? "bottom-full mb-1" : "mt-1", className)}
+          >
+            {typeof children === "function" ? children({ close: () => setOpen(false) }) : children}
+          </m.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

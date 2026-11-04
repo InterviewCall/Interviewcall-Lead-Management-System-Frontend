@@ -7,7 +7,7 @@ export interface NavItem {
   icon: IconName;
   /** Roles that see this entry. Omitted means everyone. */
   roles?: readonly Role[];
-  /** Sidebar count pill. Placeholder numbers until the leads API exists. */
+  /** Sidebar count pill. Placeholder numbers (the Leads pill is live, see the sidebar). */
   count?: string;
 }
 
@@ -17,13 +17,15 @@ export interface NavGroup {
 }
 
 const MANAGEMENT: readonly Role[] = ["SALES_MANAGER", "OPS", "ADMIN"];
+/** Only these roles may import leads. The API enforces the same rule. */
+export const IMPORT_ROLES: readonly Role[] = ["SALES_MANAGER", "ADMIN"];
 
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "WORKSPACE",
     items: [
       { href: "/my-day", label: "My day", icon: "home", count: "7" },
-      { href: "/leads", label: "Leads", icon: "users", count: "3,482" },
+      { href: "/leads", label: "Leads", icon: "users" },
       { href: "/pipeline", label: "Pipeline", icon: "kanban" },
     ],
   },
@@ -31,7 +33,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "MANAGE",
     items: [
       { href: "/assignment", label: "Assignment", icon: "shuffle", roles: MANAGEMENT, count: "214" },
-      { href: "/imports", label: "Imports", icon: "upload", roles: MANAGEMENT },
+      { href: "/imports", label: "Imports", icon: "upload", roles: IMPORT_ROLES },
     ],
   },
   {

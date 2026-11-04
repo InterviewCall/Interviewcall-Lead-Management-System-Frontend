@@ -1,6 +1,8 @@
-import { addMockEvent, mockDetailFor, type LeadDetail } from "@/mock/lead-detail";
+import { api } from "@/lib/api/client";
+import { addMockEvent, mockDetailFor, type LeadDetail as MockLeadDetail } from "@/mock/lead-detail";
 import { MOCK_LEADS, findMockLead } from "@/mock/leads";
 import type { MockLead, Stage, Temperature } from "@/mock/types";
+import type { LeadDetail, LeadFilters, LeadPage, LeadQuery, LifecycleCode, LostReason, StageCode } from "./types";
 
 /**
  * MOCK: the leads API does not exist yet. When it does, replace the bodies with
@@ -8,70 +10,18 @@ import type { MockLead, Stage, Temperature } from "@/mock/types";
  */
 const wait = (ms = 250) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-export type LeadView = "all" | "mine" | "unassigned" | "booked" | "hot" | "due";
-
-export interface LeadQuery {
-  view: LeadView;
-  search: string;
-  source: string;
-  temperature: Temperature | "";
-  stage: Stage | "";
-  owner: string;
-  page: number;
-  pageSize: number;
-  /** Name of the signed-in user, for the "My leads" view. */
-  me: string;
-}
-
-export interface LeadPage {
-  leads: MockLead[];
-  total: number;
-  counts: Record<LeadView, number>;
-}
-
-function matchesView(lead: MockLead, view: LeadView, me: string): boolean {
-  switch (view) {
-    case "mine": return lead.owner === me || lead.owner === "Aarav Bose";
-    case "unassigned": return lead.owner === null;
-    case "booked": return lead.next.kind === "booked";
-    case "hot": return lead.temperature === "Hot";
-    case "due": return lead.next.kind === "task";
-    default: return true;
-  }
-}
-
 export const leadKeys = {
   list: (q: LeadQuery) => ["leads", "list", q] as const,
+  filters: ["leads", "filters"] as const,
+  real: (id: string) => ["leads", "real", id] as const,
   detail: (id: string) => ["leads", "detail", id] as const,
   full: (id: string) => ["leads", "full", id] as const,
 };
-
-export async function listLeads(q: LeadQuery): Promise<LeadPage> {
-  await wait();
-  const needle = q.search.trim().toLowerCase();
-  const filtered = MOCK_LEADS.filter(
-    (l) =>
-      matchesView(l, q.view, q.me) &&
-      (!q.source || l.source === q.source) &&
-      (!q.temperature || l.temperature === q.temperature) &&
-      (!q.stage || l.stage === q.stage) &&
-      (!q.owner || (q.owner === "__none" ? l.owner === null : l.owner === q.owner)) &&
-      (!needle || l.name.toLowerCase().includes(needle) || l.email.toLowerCase().includes(needle) || l.phone.replace(/\s/g, "").includes(needle.replace(/\s/g, ""))),
-  );
-  const views: LeadView[] = ["all", "mine", "unassigned", "booked", "hot", "due"];
-  const counts = Object.fromEntries(views.map((v) => [v, MOCK_LEADS.filter((l) => matchesView(l, v, q.me)).length])) as Record<LeadView, number>;
-  const start = (q.page - 1) * q.pageSize;
-  return { leads: filtered.slice(start, start + q.pageSize), total: filtered.length, counts };
-}
 
 export async function getLead(id: string): Promise<MockLead | null> {
   await wait(150);
   return findMockLead(id) ?? null;
 }
-
-export const LEAD_SOURCES = Array.from(new Set(MOCK_LEADS.map((l) => l.source))).sort();
-
-export const LEAD_OWNERS = Array.from(new Set(MOCK_LEADS.map((l) => l.owner).filter((o): o is string => o !== null))).sort();
 
 export interface NewLeadInput { name: string; email: string; phone: string; source: string }
 
@@ -94,7 +44,7 @@ export async function createLead(input: NewLeadInput): Promise<MockLead> {
   return lead;
 }
 
-export interface LeadWithDetail { lead: MockLead; detail: LeadDetail }
+export interface LeadWithDetail { lead: MockLead; detail: MockLeadDetail }
 
 export async function getLeadDetail(id: string): Promise<LeadWithDetail | null> {
   await wait(200);
@@ -116,6 +66,7 @@ export async function logCall(input: LogCallInput): Promise<void> {
   await wait(350);
   const lead = findMockLead(input.leadId);
   if (!lead) throw new Error("Lead not found");
+  if (lead.stage !== input.stage) lead.stageChangedAt = new Date().toISOString();
   lead.stage = input.stage;
   lead.temperature = input.temperature;
   lead.next = { text: `${input.action} · ${input.due}`, kind: "task" };
@@ -135,6 +86,8 @@ export async function moveStage(id: string, stage: Stage): Promise<void> {
   const lead = findMockLead(id);
   if (!lead) throw new Error("Lead not found");
   lead.stage = stage;
+  lead.stageChangedAt = new Date().toISOString();
+  if (stage === "Closed Won") lead.lifecycle = "Customer";
   addMockEvent(id, { id: `stage-${Date.now()}`, title: `Moved to ${stage}`, sub: "Opportunity stage changed by you", when: "Just now", tone: "primary", kind: "system" });
 }
 
@@ -144,4 +97,56 @@ export async function markLost(id: string, reason: string): Promise<void> {
   if (!lead) throw new Error("Lead not found");
   lead.lifecycle = "Lost";
   addMockEvent(id, { id: `lost-${Date.now()}`, title: "Marked as lost", sub: reason || "No reason given", when: "Just now", tone: "danger", kind: "system" });
+}
+
+// ---- the real leads API ----
+
+export async function listLeads(q: LeadQuery): Promise<LeadPage> {
+  const params: Record<string, string | number> = { view: q.view, page: q.page, pageSize: q.pageSize };
+  if (q.search.trim()) params.search = q.search.trim();
+  if (q.sourceId !== null) params.sourceId = q.sourceId;
+  if (q.temperature) params.temperature = q.temperature;
+  if (q.stage) params.stage = q.stage;
+  if (q.lifecycle) params.lifecycle = q.lifecycle;
+  if (q.ownerId) params.ownerId = q.ownerId;
+  if (q.listId) params.listId = q.listId;
+  const { data } = await api.get<LeadPage>("/leads", { params });
+  return data;
+}
+
+export async function fetchLeadFilters(): Promise<LeadFilters> {
+  const { data } = await api.get<LeadFilters>("/leads/filters");
+  return data;
+}
+
+export async function fetchLeadDetail(id: string): Promise<LeadDetail> {
+  const { data } = await api.get<LeadDetail>(`/leads/${id}`);
+  return data;
+}
+
+// ---- marking: each call answers with the refreshed lead ----
+
+export async function setContactStage(id: string, stage: LifecycleCode): Promise<LeadDetail> {
+  const { data } = await api.post<LeadDetail>(`/leads/${id}/contact-stage`, { stage });
+  return data;
+}
+
+export async function moveOpportunity(id: string, stage: StageCode): Promise<LeadDetail> {
+  const { data } = await api.post<LeadDetail>(`/leads/${id}/opportunity/stage`, { stage });
+  return data;
+}
+
+export async function loseOpportunity(id: string, input: { reasonId: number; note: string }): Promise<LeadDetail> {
+  const { data } = await api.post<LeadDetail>(`/leads/${id}/opportunity/lost`, { reasonId: input.reasonId, note: input.note.trim() || null });
+  return data;
+}
+
+export async function reopenOpportunity(id: string): Promise<LeadDetail> {
+  const { data } = await api.post<LeadDetail>(`/leads/${id}/opportunity/reopen`);
+  return data;
+}
+
+export async function fetchLostReasons(): Promise<LostReason[]> {
+  const { data } = await api.get<LostReason[]>("/pipeline/lost-reasons");
+  return data;
 }

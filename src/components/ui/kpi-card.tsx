@@ -1,3 +1,4 @@
+import { AnimatedValue } from "@/components/motion/animated-value";
 import { cn } from "@/lib/cn";
 import { Icon, type IconName } from "./icon";
 
@@ -26,7 +27,7 @@ export function KpiCard({
         <span className="text-small font-medium text-text-2 sm:text-body">{label}</span>
       </div>
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <span className={cn("text-h1 font-bold text-text sm:text-display", loading && "animate-pulse text-muted")}>{loading ? "–" : value}</span>
+        <AnimatedValue value={loading ? "–" : value} className={cn("text-h1 font-bold text-text sm:text-display", loading && "animate-pulse text-muted")} />
         {hint ? <span className="text-small text-text-2">{hint}</span> : null}
       </div>
     </div>

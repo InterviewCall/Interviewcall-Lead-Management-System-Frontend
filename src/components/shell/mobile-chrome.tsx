@@ -1,9 +1,11 @@
 "use client";
 
+import { m } from "motion/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/cn";
+import { spring } from "@/lib/motion";
 import { TAB_BAR, titleFor } from "./nav";
 
 /** Phone header: back arrow on detail pages, title, bell. */
@@ -19,6 +21,12 @@ export function MobileHeader() {
         </button>
       ) : null}
       <h1 className="flex-1 truncate text-h2 font-semibold text-text">{titleFor(pathname)}</h1>
+      {detail ? null : (
+        <Link href="/leads?new=1" aria-label="New lead" className="flex h-9 items-center gap-1.5 rounded-lg bg-cta px-3 text-body font-medium text-white shadow-cta active:brightness-95">
+          <Icon name="plus" size={16} />
+          New
+        </Link>
+      )}
       <Link href="/leads" aria-label="Search leads" className="flex size-9 items-center justify-center rounded-lg text-text-2">
         <Icon name="search" size={18} />
       </Link>
@@ -40,8 +48,9 @@ export function TabBar() {
             key={tab.href}
             href={tab.href}
             aria-current={active ? "page" : undefined}
-            className={cn("flex flex-1 flex-col items-center justify-center gap-1 text-small font-medium", active ? "text-primary" : "text-muted")}
+            className={cn("relative flex flex-1 flex-col items-center justify-center gap-1 text-small font-medium transition-colors active:scale-95", active ? "text-primary" : "text-muted")}
           >
+            {active ? <m.span layoutId="tabbar-active" transition={spring} className="absolute inset-x-5 top-0 h-0.5 rounded-b-full bg-primary" /> : null}
             <Icon name={tab.icon} size={22} />
             {tab.label}
           </Link>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { m } from "motion/react";
 import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Avatar } from "@/components/ui/avatar";
@@ -13,13 +14,16 @@ import { Icon } from "@/components/ui/icon";
 import { PageHeader } from "@/components/ui/page-header";
 import { Segmented } from "@/components/ui/segmented";
 import { Spinner } from "@/components/ui/spinner";
+import { useToast } from "@/components/ui/toast";
 import { errorMessage } from "@/lib/api/errors";
 import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
+import { base, spring, STAGGER } from "@/lib/motion";
 import { companyRole } from "@/mock/people";
-import { TEMP_TONE, type MockLead, type Temperature } from "@/mock/types";
+import { TEMP_TONE, type MockLead, type Stage, type Temperature } from "@/mock/types";
 import { NextStep, OwnerCell, StageBadge, TempBadge } from "@/features/leads/lead-bits";
 import { getPipeline, pipelineKeys, type PipelineColumn, type PipelineQuery } from "./api";
+import { useMoveCard } from "./hooks";
 import { STAGE_COLOR, STAGE_SHORT } from "./stage-colors";
 
 type Mode = "board" | "list";
@@ -30,10 +34,28 @@ export function PipelineScreen() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<PipelineQuery>({ temperature: "", owner: "" });
   const [mobileStage, setMobileStage] = useState<string>("Call 1 Pending");
+  const toast = useToast();
+  const move = useMoveCard();
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overStage, setOverStage] = useState<Stage | null>(null);
   const pipeline = useQuery({ queryKey: pipelineKeys.all(filters), queryFn: () => getPipeline(filters), placeholderData: keepPreviousData });
   const data = pipeline.data;
   const activeFilters = Number(Boolean(filters.temperature)) + Number(Boolean(filters.owner));
   const totalShown = data ? data.columns.reduce((n, c) => n + c.count, 0) : 0;
+  function dropOn(stage: Stage) {
+    const id = dragId;
+    setDragId(null);
+    setOverStage(null);
+    const lead = data?.columns.flatMap((c) => c.leads).find((l) => l.id === id);
+    if (!id || !lead || lead.stage === stage) return;
+    move.mutate(
+      { id, stage },
+      {
+        onSuccess: () => toast.show(`${lead.name} moved to ${stage}.`),
+        onError: () => toast.show(`Could not move ${lead.name}. Try again.`, "error"),
+      },
+    );
+  }
   const mobileColumn = data?.columns.find((c) => c.stage === mobileStage) ?? data?.columns[0];
 
   return (
@@ -82,10 +104,17 @@ export function PipelineScreen() {
           }
         />
         <div className="flex flex-col gap-3 p-5">
-          <div className="flex h-3 gap-0.5 overflow-hidden rounded-full bg-bg" role="img" aria-label="Opportunities by stage">
-            {(data?.columns ?? []).filter((c) => c.count > 0).map((c) => (
-              <span key={c.stage} style={{ flexGrow: c.count, backgroundColor: STAGE_COLOR[c.stage] }} className="min-w-1" />
-            ))}
+          <div className="h-3 overflow-hidden rounded-full bg-bg" role="img" aria-label="Opportunities by stage">
+            <m.div
+              className="flex h-full gap-0.5"
+              initial={{ clipPath: "inset(0 100% 0 0)" }}
+              animate={{ clipPath: "inset(0 0% 0 0)" }}
+              transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
+            >
+              {(data?.columns ?? []).filter((c) => c.count > 0).map((c) => (
+                <m.span layout transition={spring} key={c.stage} style={{ flexGrow: c.count, backgroundColor: STAGE_COLOR[c.stage] }} className="min-w-1" />
+              ))}
+            </m.div>
           </div>
           <ul className="flex flex-wrap gap-x-4 gap-y-1.5">
             {(data?.columns ?? []).map((c) => (
@@ -105,7 +134,20 @@ export function PipelineScreen() {
           {/* Desktop board */}
           <div className="-mx-4 hidden overflow-x-auto px-4 pb-2 md:block lg:-mx-6 lg:px-6">
             <div className="flex w-max items-start gap-3">
-              {data.columns.map((c) => <BoardColumn key={c.stage} column={c} />)}
+              {data.columns.map((c, i) => (
+                <BoardColumn
+                  key={c.stage}
+                  column={c}
+                  index={i}
+                  dragging={dragId !== null}
+                  isOver={overStage === c.stage}
+                  draggingId={dragId}
+                  onOver={setOverStage}
+                  onDrop={dropOn}
+                  onDragStart={setDragId}
+                  onDragEnd={() => { setDragId(null); setOverStage(null); }}
+                />
+              ))}
             </div>
           </div>
 
@@ -163,31 +205,100 @@ function Tile({ label, value, tone = "text-text" }: { label: string; value: numb
   );
 }
 
-function BoardColumn({ column }: { column: PipelineColumn }) {
+interface BoardColumnProps {
+  column: PipelineColumn;
+  index: number;
+  dragging: boolean;
+  isOver: boolean;
+  draggingId: string | null;
+  onOver: (stage: Stage | null) => void;
+  onDrop: (stage: Stage) => void;
+  onDragStart: (id: string) => void;
+  onDragEnd: () => void;
+}
+
+function BoardColumn({ column, index, dragging, isOver, draggingId, onOver, onDrop, onDragStart, onDragEnd }: BoardColumnProps) {
   const shown = column.leads.slice(0, CARDS_PER_COLUMN);
   const more = column.count - shown.length;
   return (
-    <section aria-label={column.stage} className="flex w-[232px] shrink-0 flex-col gap-2.5 rounded-xl bg-black/[0.035] p-2.5">
+    <m.section
+      aria-label={column.stage}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ ...base, delay: index * STAGGER }}
+      onDragOver={(e) => {
+        if (!dragging) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (!isOver) onOver(column.stage);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onOver(null);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDrop(column.stage);
+      }}
+      className={cn(
+        "flex w-[232px] shrink-0 flex-col gap-2.5 rounded-xl p-2.5 transition-colors",
+        isOver ? "bg-primary-soft ring-2 ring-primary/40" : "bg-black/[0.035]",
+      )}
+    >
       <header className="flex items-center gap-2 px-1 pt-0.5">
         <span className="size-2 rounded-full" style={{ backgroundColor: STAGE_COLOR[column.stage] }} />
         <h2 className="min-w-0 flex-1 truncate text-body font-semibold text-text">{column.stage}</h2>
         <span className="rounded-full bg-surface px-2 text-small font-medium text-text-2">{column.count}</span>
       </header>
-      {shown.length === 0 ? <p className="px-1 py-4 text-center text-small text-muted">Nothing here</p> : shown.map((l) => <OppCard key={l.id} lead={l} />)}
+      {shown.length === 0 ? (
+        <p className={cn("rounded-lg border border-dashed px-1 py-6 text-center text-small", dragging ? "border-primary/40 text-primary" : "border-transparent text-muted")}>
+          {dragging ? "Drop here" : "Nothing here"}
+        </p>
+      ) : (
+        shown.map((l) => (
+          <OppCard key={l.id} lead={l} board dimmed={draggingId === l.id} onDragStart={onDragStart} onDragEnd={onDragEnd} />
+        ))
+      )}
       {more > 0 ? (
         <Link href={`/leads?stage=${encodeURIComponent(column.stage)}`} className="px-1 pb-1 text-small font-medium text-primary hover:underline">
           + {more} more
         </Link>
       ) : null}
-    </section>
+    </m.section>
   );
 }
 
-function OppCard({ lead }: { lead: MockLead }) {
+interface OppCardProps {
+  lead: MockLead;
+  /** Board cards can be dragged to another column and glide there. Phone cards stay plain. */
+  board?: boolean;
+  dimmed?: boolean;
+  onDragStart?: (id: string) => void;
+  onDragEnd?: () => void;
+}
+
+function OppCard({ lead, board = false, dimmed = false, onDragStart, onDragEnd }: OppCardProps) {
   const { company, role } = companyRole(lead);
   const unassigned = lead.owner === null;
-  return (
-    <Link href={`/leads/${lead.id}`} className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3 shadow-sm transition hover:border-primary/40 hover:shadow-card">
+  const card = (
+    <Link
+      href={`/leads/${lead.id}`}
+      draggable={board}
+      onDragStart={
+        board
+          ? (e) => {
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", lead.id);
+              onDragStart?.(lead.id);
+            }
+          : undefined
+      }
+      onDragEnd={board ? onDragEnd : undefined}
+      className={cn(
+        "flex flex-col gap-2 rounded-lg border border-border bg-surface p-3 shadow-sm transition hover:border-primary/40 hover:shadow-card",
+        board && "cursor-grab active:cursor-grabbing",
+        dimmed && "opacity-40",
+      )}
+    >
       <span className="flex items-start gap-2">
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-body font-medium text-text">{lead.name}</span>
@@ -207,6 +318,12 @@ function OppCard({ lead }: { lead: MockLead }) {
         {lead.owner ? <Avatar name={lead.owner} size={22} /> : null}
       </span>
     </Link>
+  );
+  if (!board) return card;
+  return (
+    <m.div layout="position" layoutId={`opp-${lead.id}`} transition={spring}>
+      {card}
+    </m.div>
   );
 }
 

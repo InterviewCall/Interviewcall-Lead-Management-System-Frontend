@@ -29,4 +29,6 @@ export interface MockLead {
   /** Short text for the "Next step" column. */
   next: { text: string; kind: "booked" | "task" | "none" };
   createdAt: string;
+  /** When the opportunity last changed stage. Used to show recent moves first on the board. */
+  stageChangedAt?: string;
 }

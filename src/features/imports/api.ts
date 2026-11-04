@@ -1,78 +1,93 @@
-import { MOCK_LEADS } from "@/mock/leads";
-import type { MockLead } from "@/mock/types";
-import type { DryRunRow } from "./dry-run";
-import type { Existing } from "./dry-run";
-import { normalizePhone } from "./dry-run";
+import { api } from "@/lib/api/client";
+import type {
+  ColumnMapping, DryRunResult, DuplicateMode, ImportJob, ImportOptions, ImportRow, ImportSettings, Page, RowStatus,
+  UploadResult,
+} from "./types";
 
-/**
- * MOCK: the file is parsed and checked in the browser (that part is real), but the "import" step writes
- * to the sample leads in memory. Swap `runImport` for a multipart `api.post("/imports", form)`.
- */
-const wait = (ms = 250) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+export const importKeys = {
+  all: ["imports"] as const,
+  options: ["imports", "options"] as const,
+  history: (page: number) => ["imports", "history", page] as const,
+  one: (id: string) => ["imports", "one", id] as const,
+  rows: (id: string, status: RowStatus | "ALL", page: number) => ["imports", "rows", id, status, page] as const,
+};
 
-export interface ImportRecord {
-  id: string;
-  file: string;
-  when: string;
-  rows: number;
-  imported: number;
-  status: "Done" | "Failed";
-  note?: string;
+export async function fetchOptions(): Promise<ImportOptions> {
+  const { data } = await api.get<ImportOptions>("/imports/options");
+  return data;
 }
 
-const recent: ImportRecord[] = [
-  { id: "imp-3", file: "naukri-oct-batch.csv", when: "2026-11-01T11:20:00.000Z", rows: 1248, imported: 1190, status: "Done", note: "41 matched, 17 skipped" },
-  { id: "imp-2", file: "webinar-attendees.csv", when: "2026-10-27T08:05:00.000Z", rows: 312, imported: 301, status: "Done", note: "11 matched" },
-  { id: "imp-1", file: "campus-fair.xlsx", when: "2026-10-18T13:40:00.000Z", rows: 0, imported: 0, status: "Failed", note: "Only .csv files are supported" },
-];
-
-export const importKeys = { recent: ["imports", "recent"] as const };
-
-export async function listImports(): Promise<ImportRecord[]> {
-  await wait(150);
-  return [...recent];
+export async function fetchHistory(page: number, pageSize = 8): Promise<Page<ImportJob>> {
+  const { data } = await api.get<{ imports: ImportJob[]; page: number; pageSize: number; total: number }>("/imports", {
+    params: { page, pageSize },
+  });
+  return { page: data.page, pageSize: data.pageSize, total: data.total, items: data.imports };
 }
 
-export function existingLeads(): Existing {
-  return {
-    emails: new Set(MOCK_LEADS.map((l) => l.email.toLowerCase())),
-    phones: new Set(MOCK_LEADS.map((l) => normalizePhone(l.phone)).filter((p): p is string => p !== null)),
-  };
+export async function fetchImport(id: string): Promise<ImportJob> {
+  const { data } = await api.get<{ import: ImportJob }>(`/imports/${id}`);
+  return data.import;
 }
 
-export interface RunImportInput {
-  file: string;
-  totalRows: number;
-  rows: DryRunRow[];
-  sourceTag: string;
-  /** Names to share new leads between, or empty to leave them unassigned. */
-  assignTo: string[];
+/** Step 1. Sends the file as multipart form data; `onProgress` gets 0 to 1 while it uploads. */
+export async function uploadCsv(file: File, onProgress?: (fraction: number) => void): Promise<UploadResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<UploadResult>("/imports", form, {
+    timeout: 120_000,
+    onUploadProgress: (event) => {
+      if (onProgress && event.total) onProgress(Math.min(1, event.loaded / event.total));
+    },
+  });
+  return data;
 }
 
-export async function runImport(input: RunImportInput): Promise<ImportRecord> {
-  await wait(700);
-  const fresh = input.rows.filter((r) => r.verdict.kind === "new");
-  const now = new Date().toISOString();
-  const leads: MockLead[] = fresh.map((r, i) => ({
-    id: `lead-imp-${Date.now()}-${i}`,
-    name: r.values.name ?? "Unnamed",
-    email: r.values.email ?? "",
-    phone: r.values.phone ?? "",
-    source: r.values.source ? `${input.sourceTag} · ${r.values.source}` : input.sourceTag,
-    lifecycle: "Marketing Lead",
-    stage: "Call 1 Pending",
-    temperature: "Cold",
-    owner: input.assignTo.length ? input.assignTo[i % input.assignTo.length]! : null,
-    next: input.assignTo.length ? { text: "Call within 1 hour", kind: "task" } : { text: "Not contacted yet", kind: "none" },
-    createdAt: now,
-  }));
-  MOCK_LEADS.unshift(...leads);
-  const matched = input.rows.filter((r) => r.verdict.kind === "matched").length;
-  const errors = input.rows.filter((r) => r.verdict.kind === "error").length;
-  const record: ImportRecord = {
-    id: `imp-${Date.now()}`, file: input.file, when: now, rows: input.totalRows, imported: leads.length, status: "Done",
-    note: `${matched} matched, ${errors} skipped`,
-  };
-  recent.unshift(record);
-  return record;
+export interface ConfigureInput {
+  mapping: ColumnMapping[];
+  settings: ImportSettings & { sourceId: number };
+}
+
+/** Step 2. Saves the mapping and the list, source, owner and duplicate rule. */
+export async function configureImport(id: string, input: ConfigureInput): Promise<ImportJob> {
+  const { settings } = input;
+  const { data } = await api.put<{ import: ImportJob }>(`/imports/${id}/configuration`, {
+    mapping: input.mapping.map((m) => (m.target === "custom" ? { index: m.index, target: m.target, label: m.label ?? "" } : { index: m.index, target: m.target })),
+    listName: settings.listName.trim(),
+    listDescription: settings.listDescription.trim() || null,
+    ownerId: settings.ownerId,
+    sourceId: settings.sourceId,
+    duplicateMode: settings.duplicateMode satisfies DuplicateMode,
+    note: settings.note.trim() || null,
+  });
+  return data.import;
+}
+
+/** Step 3. Checks every row without saving anything. */
+export async function runDryRun(id: string): Promise<DryRunResult> {
+  const { data } = await api.post<DryRunResult>(`/imports/${id}/dry-run`, undefined, { timeout: 120_000 });
+  return data;
+}
+
+/** Step 4. Queues the import; progress is read with `fetchImport`. */
+export async function startImport(id: string): Promise<ImportJob> {
+  const { data } = await api.post<{ import: ImportJob }>(`/imports/${id}/start`);
+  return data.import;
+}
+
+export async function cancelImport(id: string): Promise<ImportJob> {
+  const { data } = await api.post<{ import: ImportJob }>(`/imports/${id}/cancel`);
+  return data.import;
+}
+
+export async function fetchRows(id: string, status: RowStatus | "ALL", page: number, pageSize = 20): Promise<Page<ImportRow>> {
+  const params: Record<string, string | number> = { page, pageSize };
+  if (status !== "ALL") params.status = status;
+  const { data } = await api.get<{ rows: ImportRow[]; page: number; pageSize: number; total: number }>(`/imports/${id}/rows`, { params });
+  return { page: data.page, pageSize: data.pageSize, total: data.total, items: data.rows };
+}
+
+/** The original file plus a status and a message for every row, as CSV text. */
+export async function fetchReport(id: string): Promise<string> {
+  const { data } = await api.get<string>(`/imports/${id}/report`, { responseType: "text", transformResponse: (body: string) => body });
+  return data;
 }

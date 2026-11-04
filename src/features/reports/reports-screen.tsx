@@ -1,6 +1,7 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { m } from "motion/react";
 import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Avatar } from "@/components/ui/avatar";
@@ -15,6 +16,7 @@ import { errorMessage } from "@/lib/api/errors";
 import { cn } from "@/lib/cn";
 import { downloadText, toCsv } from "@/lib/download";
 import { formatNumber } from "@/lib/format";
+import { EASE_OUT, STAGGER } from "@/lib/motion";
 import { getReport, RANGES, reportKeys, REPORT_SOURCES, type RangeDays, type ReportSource } from "./api";
 
 const SOURCE_COLOR: Record<ReportSource, string> = { WorkR: "#4f46e5", VSL: "#0284c7", Meta: "#d97706", Other: "#9ca3af" };
@@ -92,12 +94,15 @@ export function ReportsScreen() {
                       <li key={f.stage} className="flex items-center gap-3">
                         <span className="w-[110px] shrink-0 text-small text-text sm:w-[150px] sm:text-body">{f.stage}</span>
                         <span className="h-8 min-w-0 flex-1">
-                          <span
+                          <m.span
                             className={cn("flex h-full min-w-10 items-center rounded-md px-2.5 text-small font-semibold text-white", i === data.funnel.length - 1 ? "bg-ok" : "bg-primary")}
-                            style={{ width: `${Math.max(8, (f.count / top) * 100)}%`, opacity: i === data.funnel.length - 1 ? 1 : 1 - i * 0.08 }}
+                            style={{ opacity: i === data.funnel.length - 1 ? 1 : 1 - i * 0.08 }}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.max(8, (f.count / top) * 100)}%` }}
+                            transition={{ duration: 0.6, ease: EASE_OUT, delay: i * STAGGER }}
                           >
                             {formatNumber(f.count)}
-                          </span>
+                          </m.span>
                         </span>
                         <span className="w-10 shrink-0 text-right text-small text-text-2">{f.fromPrev === null ? "" : `${f.fromPrev}%`}</span>
                       </li>
@@ -116,9 +121,14 @@ export function ReportsScreen() {
                       return (
                         <div key={w.label} className="flex h-full flex-1 flex-col justify-end gap-1.5">
                           <span className="text-center text-small font-medium text-text-2">{formatNumber(total)}</span>
-                          <div className="flex flex-col-reverse gap-0.5 overflow-hidden rounded-t-md" style={{ height: `${(total / max) * 85}%` }}>
+                          <m.div
+                            className="flex flex-col-reverse gap-0.5 overflow-hidden rounded-t-md"
+                            initial={{ height: 0 }}
+                            animate={{ height: `${(total / max) * 85}%` }}
+                            transition={{ duration: 0.6, ease: EASE_OUT, delay: data.weeks.indexOf(w) * STAGGER }}
+                          >
                             {data.sourcesShown.map((s) => <span key={s} style={{ flexGrow: w.values[s], backgroundColor: SOURCE_COLOR[s] }} />)}
-                          </div>
+                          </m.div>
                         </div>
                       );
                     })}
@@ -156,7 +166,7 @@ export function ReportsScreen() {
                         <td className="px-4 text-body text-text">{b.contactedPct}%</td>
                         <td className="px-4">
                           <span className="flex items-center gap-2">
-                            <span className="h-1.5 w-16 overflow-hidden rounded-full bg-bg"><span className="block h-full rounded-full bg-primary" style={{ width: `${b.connectPct}%` }} /></span>
+                            <span className="h-1.5 w-16 overflow-hidden rounded-full bg-bg"><m.span className="block h-full rounded-full bg-primary" initial={{ width: 0 }} animate={{ width: `${b.connectPct}%` }} transition={{ duration: 0.6, ease: EASE_OUT }} /></span>
                             <span className="text-body text-text-2">{b.connectPct}%</span>
                           </span>
                         </td>
@@ -173,12 +183,12 @@ export function ReportsScreen() {
               <Card>
                 <CardHeader title="Why opportunities were lost" subtitle={`Closed as lost · ${formatNumber(data.lost.total)} this period`} />
                 <ul className="flex flex-col gap-3 p-5">
-                  {data.lost.reasons.map((r) => {
+                  {data.lost.reasons.map((r, i) => {
                     const max = Math.max(1, ...data.lost.reasons.map((x) => x.count));
                     return (
                       <li key={r.reason} className="flex flex-col gap-1.5">
                         <span className="flex items-baseline justify-between text-body"><span className="text-text">{r.reason}</span><span className="font-medium text-text">{formatNumber(r.count)}</span></span>
-                        <span className="h-2 overflow-hidden rounded-full bg-bg"><span className="block h-full rounded-full bg-bad/70" style={{ width: `${(r.count / max) * 100}%` }} /></span>
+                        <span className="h-2 overflow-hidden rounded-full bg-bg"><m.span className="block h-full rounded-full bg-bad/70" initial={{ width: 0 }} animate={{ width: `${(r.count / max) * 100}%` }} transition={{ duration: 0.6, ease: EASE_OUT, delay: i * STAGGER }} /></span>
                       </li>
                     );
                   })}

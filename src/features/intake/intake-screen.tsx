@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { m } from "motion/react";
 import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -154,7 +155,7 @@ function SourceCard({ source }: { source: SourceHealth }) {
         <div className="flex gap-3"><dt className="w-[90px] shrink-0 text-muted">Nightly check</dt><dd className="text-text">{source.nightly}</dd></div>
       </dl>
       <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="h-8 w-full" role="img" aria-label={`Events per hour, last 12 hours, for ${source.name}`}>
-        <polyline points={points} fill="none" stroke={quiet ? "#d97706" : "#4f46e5"} strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+        <m.polyline points={points} fill="none" stroke={quiet ? "#d97706" : "#4f46e5"} strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }} />
       </svg>
     </Card>
   );

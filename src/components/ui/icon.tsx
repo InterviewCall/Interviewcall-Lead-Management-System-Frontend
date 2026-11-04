@@ -3,7 +3,7 @@ import {
   ChevronDown, ChevronRight, Clock, Download, Ellipsis, FileText, Funnel, House, Info, KeyRound,
   Link2, List, Lock, LogOut, Mail, Menu, MessageCircle, NotebookPen, PenLine, Phone, Plus,
   RefreshCw, Search, Server, Shield, Shuffle, SquareKanban, Target, TriangleAlert, Upload, User,
-  Users, X, Zap, UserX, UserCheck, Eye, EyeOff, type LucideIcon,
+  Users, X, Zap, UserX, UserCheck, Eye, EyeOff, Copy, type LucideIcon,
 } from "lucide-react";
 
 /** Icon names follow the layer names in the Figma file (icon/home, icon/kanban …). */
@@ -15,7 +15,7 @@ const ICONS = {
   msg: MessageCircle, more: Ellipsis, link: Link2, edit: PenLine, swap: ArrowRightLeft,
   form: NotebookPen, x: X, list: List, info: Info, arrowR: ArrowRight, warn: TriangleAlert,
   file: FileText, refresh: RefreshCw, server: Server, target: Target, menu: Menu, back: ArrowLeft,
-  logout: LogOut, key: KeyRound, userX: UserX, userCheck: UserCheck, eye: Eye, eyeOff: EyeOff,
+  logout: LogOut, key: KeyRound, userX: UserX, userCheck: UserCheck, eye: Eye, eyeOff: EyeOff, copy: Copy,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

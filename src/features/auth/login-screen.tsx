@@ -36,13 +36,13 @@ function BrandPanel() {
   return (
     <section className="flex flex-col gap-6 px-6 pt-12 pb-10 lg:w-[720px] lg:max-w-[50%] lg:shrink-0 lg:justify-center lg:bg-brand-hero lg:p-16">
       <Wordmark large />
-      <h1 className="max-w-[520px] text-h1 font-bold text-white lg:text-display">Every lead followed up, every time.</h1>
+      <h1 className="anim-fade-up max-w-[520px] text-h1 font-bold text-white lg:text-display">Every lead followed up, every time.</h1>
       <p className="max-w-[480px] text-body text-side-text">
         One place for your BDAs and closers to work leads from WorkR and the VSL, and for managers to see what is moving.
       </p>
       <ul className="hidden flex-col gap-3.5 pt-4 lg:flex">
-        {FEATURES.map((f) => (
-          <li key={f.text} className="flex items-center gap-3">
+        {FEATURES.map((f, i) => (
+          <li key={f.text} className="anim-fade-up flex items-center gap-3" style={{ animationDelay: `${0.25 + i * 0.1}s` }}>
             <span className="flex size-9 items-center justify-center rounded-[10px] bg-side-active text-[#a5b4fc]">
               <Icon name={f.icon} size={18} />
             </span>
@@ -91,7 +91,7 @@ function LoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate className="flex w-full max-w-[400px] flex-col gap-5">
+    <form onSubmit={onSubmit} noValidate className="anim-fade-up flex w-full max-w-[400px] flex-col gap-5">
       <div className="flex flex-col gap-1.5">
         <h2 className="text-h1 font-semibold text-text">Welcome back</h2>
         <p className="text-body text-text-2">Sign in with your company account to open your leads.</p>

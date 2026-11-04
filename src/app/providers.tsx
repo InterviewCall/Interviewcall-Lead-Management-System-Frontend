@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import { MotionProvider } from "@/components/motion/motion-provider";
 import { AuthProvider } from "@/features/auth/auth-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api/errors";
@@ -25,9 +26,11 @@ export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(makeQueryClient);
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <ToastProvider>{children}</ToastProvider>
-      </AuthProvider>
+      <MotionProvider>
+        <AuthProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </AuthProvider>
+      </MotionProvider>
     </QueryClientProvider>
   );
 }

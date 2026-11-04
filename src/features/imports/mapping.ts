@@ -1,48 +1,38 @@
-/** The CRM fields a column can map to. `custom` creates a new field from the column. */
-export const CRM_FIELDS = [
-  { key: "name", label: "Full name" },
-  { key: "email", label: "Email" },
-  { key: "phone", label: "Phone" },
-  { key: "company", label: "Current company" },
-  { key: "ctc", label: "CTC range" },
-  { key: "gradYear", label: "Graduation year" },
-  { key: "domain", label: "Current domain" },
-  { key: "source", label: "Source attribution" },
-] as const;
+import type { ColumnMapping, ImportOptions } from "./types";
 
-export type FieldKey = (typeof CRM_FIELDS)[number]["key"];
-export type Target = FieldKey | "custom" | "skip";
+/** The same checks the server makes, so a problem shows up before the round trip. */
+export function mappingProblems(mapping: ColumnMapping[], fields: ImportOptions["fields"]): string[] {
+  const problems: string[] = [];
+  const used = new Map<string, number>();
+  const customNames = new Set<string>();
+  const label = (key: string) => fields.find((f) => f.key === key)?.label ?? key;
 
-export const TARGET_LABEL: Record<Target, string> = {
-  ...(Object.fromEntries(CRM_FIELDS.map((f) => [f.key, f.label])) as Record<FieldKey, string>),
-  custom: "New field",
-  skip: "Do not import",
-};
-
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-
-const SYNONYMS: Record<FieldKey, string[]> = {
-  name: ["fullname", "name", "candidatename", "leadname"],
-  email: ["email", "emailaddress", "emailid", "mail"],
-  phone: ["phone", "mobile", "mobilenumber", "phonenumber", "contact", "contactnumber", "whatsapp"],
-  company: ["company", "currentcompany", "organisation", "organization", "employer"],
-  ctc: ["ctc", "ctclpa", "currentctc", "salary"],
-  gradYear: ["gradyear", "graduationyear", "passoutyear", "yearofpassing"],
-  domain: ["domain", "currentdomain", "stack", "skill"],
-  source: ["utmsource", "source", "leadsource", "channel"],
-};
-
-/** Guess what each column is. A target is used once; later duplicates become a new field. */
-export function autoMap(headers: string[]): Target[] {
-  const used = new Set<FieldKey>();
-  return headers.map((h) => {
-    const n = norm(h);
-    const match = (Object.keys(SYNONYMS) as FieldKey[]).find((k) => !used.has(k) && SYNONYMS[k].includes(n));
-    if (match) {
-      used.add(match);
-      return match;
+  for (const column of mapping) {
+    if (column.target === "skip") continue;
+    if (column.target === "custom") {
+      const name = (column.label ?? "").trim();
+      if (name.replace(/[^a-z0-9]/gi, "").length < 2) problems.push("A new field needs a name of at least 2 letters or digits.");
+      else if (customNames.has(name.toLowerCase())) problems.push(`Two columns would make the field "${name}".`);
+      customNames.add(name.toLowerCase());
+      continue;
     }
-    if (/^(lead)?score$|^rating$|^notes?$|^id$/.test(n)) return "skip";
-    return "custom";
-  });
+    used.set(column.target, (used.get(column.target) ?? 0) + 1);
+  }
+  for (const [key, count] of used) if (count > 1) problems.push(`More than one column is mapped to ${label(key)}.`);
+
+  const hasName = used.has("name");
+  const hasSplit = used.has("firstName") || used.has("lastName");
+  if (hasName && hasSplit) problems.push("Map either Full name or First name and Last name, not both.");
+  else if (!hasName && !used.has("firstName")) problems.push("Map a column to Full name (or First name).");
+  if (!used.has("email") && !used.has("phone")) problems.push("Map a column to Email or Phone. They are how duplicates are found.");
+  return problems;
+}
+
+/** "CALL_1_PENDING" becomes "Call 1 Pending". */
+export function stageLabel(value: string): string {
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
 }
