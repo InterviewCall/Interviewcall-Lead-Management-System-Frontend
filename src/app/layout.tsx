@@ -5,7 +5,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: { default: "InterviewCall CRM", template: "%s · InterviewCall CRM" },
+  title: { default: "LeadNest", template: "%s · LeadNest" },
   description: "Lead management for BDAs, closers and managers.",
 };
 

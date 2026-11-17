@@ -71,7 +71,7 @@ export function titleFor(pathname: string): string {
   if (pathname.startsWith("/leads/")) return "Lead";
   if (pathname === "/more") return "More";
   const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => pathname === i.href || pathname.startsWith(`${i.href}/`));
-  return item?.label ?? "InterviewCall CRM";
+  return item?.label ?? "LeadNest";
 }
 
 /** The five tabs on the phone layout. Everything else lives under "More". */

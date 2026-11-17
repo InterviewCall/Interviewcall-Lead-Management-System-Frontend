@@ -62,8 +62,8 @@ export function Sidebar() {
       <div className="flex items-center gap-2.5 pb-5 pl-1.5">
         <LogoMark height={32} />
         <div className={cn("flex flex-col", fade)}>
-          <span className="font-display text-[15px] leading-5 font-bold tracking-[-0.2px] text-white">InterviewCall</span>
-          <span className="text-small text-side-text">Sales CRM</span>
+          <span className="font-display text-[15px] leading-5 font-bold tracking-[-0.2px] text-white">LeadNest</span>
+          <span className="text-small text-side-text">by InterviewCall</span>
         </div>
       </div>
 

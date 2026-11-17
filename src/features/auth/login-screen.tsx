@@ -16,9 +16,9 @@ import { useLogin } from "./hooks";
 
 /** Made-up people for the preview on the sign-in page: it shows the kind of day the CRM organises. */
 const PREVIEW: Array<{ name: string; what: string; when: string; heat: "HOT" | "WARM" | "COLD" }> = [
-  { name: "Riya Menon", what: "Booked call from the VSL", when: "11:30 am", heat: "HOT" },
+  { name: "Riya Menon", what: "Booked call for today", when: "11:30 am", heat: "HOT" },
   { name: "Arjun Das", what: "Follow-up: share the test result", when: "2:00 pm", heat: "WARM" },
-  { name: "Sana Qureshi", what: "New lead from WorkR", when: "just now", heat: "COLD" },
+  { name: "Sana Qureshi", what: "New lead just arrived", when: "just now", heat: "COLD" },
 ];
 const HEAT_DOT = { HOT: "bg-hot", WARM: "bg-warm", COLD: "bg-cold" } as const;
 
@@ -46,7 +46,7 @@ function BrandPanel() {
         Every lead followed up, every time.
       </h1>
       <p className="max-w-[480px] text-body text-side-text">
-        One place for BDAs and closers to work leads from WorkR and the VSL, and for managers to see what is moving.
+        One place for BDAs and closers to work their leads, and for managers to see what is moving.
       </p>
 
       {/* A glimpse of a working day: the timeline fills to "now" and the day's calls arrive. Illustrative only. */}

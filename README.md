@@ -1,4 +1,4 @@
-# InterviewCall CRM — web app
+# LeadNest — web app
 
 Next.js 16 (App Router) front end for the in-house CRM. Talks to the NestJS API with axios and TanStack Query.
 

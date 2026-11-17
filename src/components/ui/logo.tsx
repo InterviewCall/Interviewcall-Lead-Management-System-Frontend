@@ -19,8 +19,8 @@ export function Wordmark({ large = false }: { large?: boolean }) {
     <div className="flex items-center gap-2.5">
       <LogoMark height={large ? 55 : 32} className={large ? "mr-1" : undefined} />
       <div className="flex flex-col">
-        <span className={cn("font-semibold text-white", large ? "text-h2" : "text-body")}>InterviewCall</span>
-        <span className="text-small text-side-text">CRM</span>
+        <span className={cn("text-white", large ? "text-display font-bold" : "text-body font-semibold")}>LeadNest</span>
+        <span className={cn("text-side-text", large ? "text-body" : "text-small")}>by InterviewCall</span>
       </div>
     </div>
   );
