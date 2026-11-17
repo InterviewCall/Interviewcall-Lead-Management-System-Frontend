@@ -35,7 +35,7 @@ export function Segmented<T extends string>({
             {active ? <m.span layoutId={pillId} transition={spring} className="absolute inset-0 rounded-md bg-surface shadow-sm" /> : null}
             <span className="relative">
               {o.label}
-              {o.count !== undefined ? <span className="ml-1">{o.count}</span> : null}
+              {o.count !== undefined ? <span className={cn("nums ml-1", active ? "text-text-2" : "text-muted")}>{o.count}</span> : null}
             </span>
           </button>
         );

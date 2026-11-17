@@ -5,14 +5,19 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/cn";
+import { useAuth } from "@/features/auth/auth-provider";
+import { NotificationBell } from "@/features/notifications/notification-bell";
 import { spring } from "@/lib/motion";
-import { TAB_BAR, titleFor } from "./nav";
+import { openPalette } from "./command-palette";
+import { ADD_LEAD_ROLES, TAB_BAR, titleFor } from "./nav";
 
 /** Phone header: back arrow on detail pages, title, bell. */
 export function MobileHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const detail = pathname.startsWith("/leads/");
+  const { user } = useAuth();
+  const canAdd = Boolean(user && ADD_LEAD_ROLES.includes(user.role));
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-border bg-surface px-4 lg:hidden">
       {detail ? (
@@ -21,18 +26,16 @@ export function MobileHeader() {
         </button>
       ) : null}
       <h1 className="flex-1 truncate text-h2 font-semibold text-text">{titleFor(pathname)}</h1>
-      {detail ? null : (
+      {detail || !canAdd ? null : (
         <Link href="/leads?new=1" aria-label="New lead" className="flex h-9 items-center gap-1.5 rounded-lg bg-cta px-3 text-body font-medium text-white shadow-cta active:brightness-95">
           <Icon name="plus" size={16} />
           New
         </Link>
       )}
-      <Link href="/leads" aria-label="Search leads" className="flex size-9 items-center justify-center rounded-lg text-text-2">
+      <button type="button" onClick={openPalette} aria-label="Find a lead" className="flex size-9 items-center justify-center rounded-lg text-text-2">
         <Icon name="search" size={18} />
-      </Link>
-      <button type="button" aria-label="Notifications" className="flex size-9 items-center justify-center rounded-lg text-text-2">
-        <Icon name="bell" size={18} />
       </button>
+      <NotificationBell compact />
     </header>
   );
 }

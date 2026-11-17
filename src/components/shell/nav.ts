@@ -7,8 +7,6 @@ export interface NavItem {
   icon: IconName;
   /** Roles that see this entry. Omitted means everyone. */
   roles?: readonly Role[];
-  /** Sidebar count pill. Placeholder numbers (the Leads pill is live, see the sidebar). */
-  count?: string;
 }
 
 export interface NavGroup {
@@ -16,35 +14,43 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-const MANAGEMENT: readonly Role[] = ["SALES_MANAGER", "OPS", "ADMIN"];
+/** Only these roles may hand leads out (the API enforces the same rule). */
+export const ASSIGN_ROLES: readonly Role[] = ["SALES_MANAGER", "ADMIN"];
+/** Only these roles may add a lead by hand (a BDA owns what they add). The API enforces the same rule. */
+export const ADD_LEAD_ROLES: readonly Role[] = ["SALES_MANAGER", "ADMIN", "BDA"];
 /** Only these roles may import leads. The API enforces the same rule. */
 export const IMPORT_ROLES: readonly Role[] = ["SALES_MANAGER", "ADMIN"];
 
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: "WORKSPACE",
+    label: "Workspace",
     items: [
-      { href: "/my-day", label: "My day", icon: "home", count: "7" },
+      { href: "/my-day", label: "My day", icon: "home" },
       { href: "/leads", label: "Leads", icon: "users" },
       { href: "/pipeline", label: "Pipeline", icon: "kanban" },
     ],
   },
   {
-    label: "MANAGE",
+    label: "Manage",
     items: [
-      { href: "/assignment", label: "Assignment", icon: "shuffle", roles: MANAGEMENT, count: "214" },
+      { href: "/assignment", label: "Assignment", icon: "shuffle", roles: ASSIGN_ROLES },
       { href: "/imports", label: "Imports", icon: "upload", roles: IMPORT_ROLES },
     ],
   },
   {
-    label: "INSIGHTS",
+    label: "Insights",
     items: [{ href: "/reports", label: "Reports", icon: "bars" }],
   },
   {
-    label: "ADMIN",
+    label: "Admin",
     items: [
       { href: "/intake", label: "Intake monitor", icon: "pulse", roles: ["OPS", "ADMIN"] },
       { href: "/team", label: "Team and roles", icon: "shield", roles: ["ADMIN"] },
+      { href: "/sources", label: "Lead sources", icon: "tag", roles: ["ADMIN"] },
+      { href: "/custom-fields", label: "Custom fields", icon: "list", roles: ["ADMIN"] },
+      { href: "/outcomes", label: "Call outcomes", icon: "phone", roles: ["ADMIN", "SALES_MANAGER"] },
+      { href: "/audit", label: "Audit log", icon: "file", roles: ["ADMIN"] },
+      { href: "/settings", label: "Settings", icon: "filter", roles: ["ADMIN"] },
     ],
   },
 ];

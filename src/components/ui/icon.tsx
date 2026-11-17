@@ -1,16 +1,17 @@
 import {
   Activity, ArrowLeft, ArrowRight, ArrowRightLeft, Bell, Calendar, Check, ChartColumn,
-  ChevronDown, ChevronRight, Clock, Download, Ellipsis, FileText, Funnel, House, Info, KeyRound,
+  ChevronDown, ChevronRight, ChevronUp, Clock, Download, Ellipsis, FileText, Funnel, House, Info, KeyRound,
   Link2, List, Lock, LogOut, Mail, Menu, MessageCircle, NotebookPen, PenLine, Phone, Plus,
   RefreshCw, Search, Server, Shield, Shuffle, SquareKanban, Target, TriangleAlert, Upload, User,
-  Users, X, Zap, UserX, UserCheck, Eye, EyeOff, Copy, type LucideIcon,
+  Users, X, Zap, UserX, UserCheck, Eye, EyeOff, Copy, IndianRupee, Wallet, Tag, type LucideIcon,
 } from "lucide-react";
 
 /** Icon names follow the layer names in the Figma file (icon/home, icon/kanban …). */
 const ICONS = {
+  rupee: IndianRupee, wallet: Wallet, tag: Tag,
   zap: Zap, clock: Clock, bars: ChartColumn, users: Users, mail: Mail, lock: Lock, home: House,
   kanban: SquareKanban, shuffle: Shuffle, upload: Upload, pulse: Activity, shield: Shield,
-  search: Search, bell: Bell, plus: Plus, download: Download, chev: ChevronDown, filter: Funnel,
+  search: Search, bell: Bell, plus: Plus, download: Download, chev: ChevronDown, up: ChevronUp, filter: Funnel,
   check: Check, calendar: Calendar, phone: Phone, right: ChevronRight, user: User, note: FileText,
   msg: MessageCircle, more: Ellipsis, link: Link2, edit: PenLine, swap: ArrowRightLeft,
   form: NotebookPen, x: X, list: List, info: Info, arrowR: ArrowRight, warn: TriangleAlert,

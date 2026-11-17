@@ -70,7 +70,7 @@ export function ContactStageMenu({
     >
       {({ close }) => (
         <div role="listbox" aria-label="Contact stage" className="flex flex-col">
-          <p className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">Contact stage</p>
+          <p className="px-2.5 pt-1.5 pb-1 text-small font-medium text-muted">Contact stage</p>
           {CONTACT_STAGES.map(({ code, hint }) => {
             const access = contactStageAccess(role, current, code);
             const selected = code === current;

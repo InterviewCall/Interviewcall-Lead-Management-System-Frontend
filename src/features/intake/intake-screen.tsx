@@ -99,7 +99,7 @@ export function IntakeScreen() {
               <thead>
                 <tr className="h-10 border-b border-border bg-surface-alt">
                   {["Received", "Source", "Event", "Status", "Tries", "Lead / error"].map((h) => (
-                    <th key={h} className="px-4 text-cap font-semibold tracking-[0.5px] text-text-2 uppercase">{h}</th>
+                    <th key={h} className="px-4 text-small font-medium text-text-2">{h}</th>
                   ))}
                   <th className="w-24" aria-label="Actions" />
                 </tr>

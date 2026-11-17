@@ -63,7 +63,7 @@ export function Modal({ open, title, subtitle, onClose, children, footer, width 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
           <m.div
-            className="absolute inset-0 bg-slate-900/50"
+            className="absolute inset-0 bg-ink/45 backdrop-blur-[2px]"
             onClick={onClose}
             aria-hidden="true"
             initial={{ opacity: 0 }}
@@ -78,7 +78,7 @@ export function Modal({ open, title, subtitle, onClose, children, footer, width 
             aria-labelledby={titleId}
             tabIndex={-1}
             style={{ maxWidth: width }}
-            className="relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-surface shadow-pop outline-none sm:rounded-xl"
+            className="relative flex max-h-[92dvh] w-full flex-col rounded-t-[20px] bg-surface shadow-pop outline-none sm:rounded-2xl"
             // Phones: the sheet rises from the bottom and can be pulled down to dismiss. Desktop: a soft pop.
             initial={phone ? { y: "100%" } : { opacity: 0, scale: 0.96, y: 10 }}
             animate={phone ? { y: 0 } : { opacity: 1, scale: 1, y: 0 }}
@@ -102,7 +102,7 @@ export function Modal({ open, title, subtitle, onClose, children, footer, width 
             </div>
             <div className="flex items-start gap-3 border-b border-border px-6 py-4 max-sm:touch-none" onPointerDown={phone ? (event) => dragControls.start(event) : undefined}>
               <div className="min-w-0 flex-1">
-                <h2 id={titleId} className="text-h2 font-semibold text-text">{title}</h2>
+                <h2 id={titleId} className="font-display text-[18px] leading-6 font-bold tracking-[-0.2px] text-text">{title}</h2>
                 {subtitle ? <p className="mt-0.5 text-body text-text-2">{subtitle}</p> : null}
               </div>
               <button type="button" onClick={onClose} aria-label="Close" className="rounded-md p-1 hover:bg-black/5">

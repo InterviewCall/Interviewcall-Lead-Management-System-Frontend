@@ -1,21 +1,26 @@
 "use client";
 
+import { m, useReducedMotion } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
-import { Icon, type IconName } from "@/components/ui/icon";
+import { Icon } from "@/components/ui/icon";
 import { Wordmark } from "@/components/ui/logo";
 import { errorMessage, toApiError } from "@/lib/api/errors";
+import { cn } from "@/lib/cn";
+import { EASE_OUT } from "@/lib/motion";
 import { GuestOnly, safeNext } from "./guards";
 import { useLogin } from "./hooks";
 
-const FEATURES: Array<{ icon: IconName; text: string }> = [
-  { icon: "zap", text: "New leads arrive within seconds of signup" },
-  { icon: "clock", text: "Next steps and reminders so nothing goes cold" },
-  { icon: "bars", text: "Clear funnel and BDA reports for managers" },
+/** Made-up people for the preview on the sign-in page: it shows the kind of day the CRM organises. */
+const PREVIEW: Array<{ name: string; what: string; when: string; heat: "HOT" | "WARM" | "COLD" }> = [
+  { name: "Riya Menon", what: "Booked call from the VSL", when: "11:30 am", heat: "HOT" },
+  { name: "Arjun Das", what: "Follow-up: share the test result", when: "2:00 pm", heat: "WARM" },
+  { name: "Sana Qureshi", what: "New lead from WorkR", when: "just now", heat: "COLD" },
 ];
+const HEAT_DOT = { HOT: "bg-hot", WARM: "bg-warm", COLD: "bg-cold" } as const;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -33,23 +38,45 @@ export function LoginScreen() {
 }
 
 function BrandPanel() {
+  const reduce = useReducedMotion();
   return (
     <section className="flex flex-col gap-6 px-6 pt-12 pb-10 lg:w-[720px] lg:max-w-[50%] lg:shrink-0 lg:justify-center lg:bg-brand-hero lg:p-16">
       <Wordmark large />
-      <h1 className="anim-fade-up max-w-[520px] text-h1 font-bold text-white lg:text-display">Every lead followed up, every time.</h1>
+      <h1 className="anim-fade-up max-w-[520px] font-display text-[30px] leading-9 font-bold tracking-[-0.6px] text-white lg:text-[40px] lg:leading-[46px]">
+        Every lead followed up, every time.
+      </h1>
       <p className="max-w-[480px] text-body text-side-text">
-        One place for your BDAs and closers to work leads from WorkR and the VSL, and for managers to see what is moving.
+        One place for BDAs and closers to work leads from WorkR and the VSL, and for managers to see what is moving.
       </p>
-      <ul className="hidden flex-col gap-3.5 pt-4 lg:flex">
-        {FEATURES.map((f, i) => (
-          <li key={f.text} className="anim-fade-up flex items-center gap-3" style={{ animationDelay: `${0.25 + i * 0.1}s` }}>
-            <span className="flex size-9 items-center justify-center rounded-[10px] bg-side-active text-[#a5b4fc]">
-              <Icon name={f.icon} size={18} />
-            </span>
-            <span className="text-body font-medium text-white">{f.text}</span>
-          </li>
-        ))}
-      </ul>
+
+      {/* A glimpse of a working day: the timeline fills to "now" and the day's calls arrive. Illustrative only. */}
+      <div aria-hidden className="mt-2 hidden max-w-[460px] flex-col gap-3 rounded-2xl bg-white/[0.04] p-4 ring-1 ring-white/10 lg:flex">
+        <div className="flex items-center justify-between text-[11px] text-side-text">
+          <span>Today</span>
+          <span className="nums">9 am to 9 pm</span>
+        </div>
+        <div className="relative h-1.5 rounded-full bg-white/10">
+          <m.div className="absolute inset-y-0 left-0 w-[46%] origin-left rounded-full bg-gradient-to-r from-primary/40 to-primary" initial={reduce ? false : { scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: 1, ease: EASE_OUT, delay: 0.3 }} />
+          {[0.21, 0.38, 0.62, 0.8].map((x, i) => (
+            <m.span key={x} className={cn("absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-ink", i === 2 ? "size-3 bg-white" : "size-2 bg-warm")} style={{ left: `${x * 100}%` }}
+              initial={reduce ? false : { opacity: 0, scale: 0.3 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", stiffness: 500, damping: 24, delay: 0.3 + Math.min(x, 0.46) * 2.1 + (x > 0.46 ? 0.25 : 0) }} />
+          ))}
+          <m.span className="absolute top-1/2 left-[46%] size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }} />
+        </div>
+        <ul className="flex flex-col gap-2 pt-1">
+          {PREVIEW.map((p, i) => (
+            <m.li key={p.name} className="flex items-center gap-3 rounded-xl bg-white/[0.05] px-3 py-2.5"
+              initial={reduce ? false : { opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ type: "spring", stiffness: 380, damping: 32, delay: 1.1 + i * 0.14 }}>
+              <span className={cn("size-2 shrink-0 rounded-full", HEAT_DOT[p.heat])} />
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-body font-semibold text-white">{p.name}</span>
+                <span className="truncate text-small text-side-text">{p.what}</span>
+              </span>
+              <span className="nums text-small font-medium whitespace-nowrap text-white/80">{p.when}</span>
+            </m.li>
+          ))}
+        </ul>
+      </div>
     </section>
   );
 }
@@ -93,25 +120,8 @@ function LoginForm() {
   return (
     <form onSubmit={onSubmit} noValidate className="anim-fade-up flex w-full max-w-[400px] flex-col gap-5">
       <div className="flex flex-col gap-1.5">
-        <h2 className="text-h1 font-semibold text-text">Welcome back</h2>
+        <h2 className="font-display text-h1 font-bold text-text">Welcome back</h2>
         <p className="text-body text-text-2">Sign in with your company account to open your leads.</p>
-      </div>
-
-      <button
-        type="button"
-        disabled
-        title="Google sign-in is not available yet"
-        className="flex h-11 w-full items-center justify-center gap-2.5 rounded-lg border border-border-strong bg-surface text-body font-medium text-text opacity-60"
-      >
-        <Icon name="users" size={18} className="text-text-2" />
-        Continue with Google Workspace
-        <span className="rounded-full bg-bg px-2 py-0.5 text-small text-text-2">Soon</span>
-      </button>
-
-      <div className="flex items-center gap-3">
-        <span className="h-px flex-1 bg-border" />
-        <span className="text-small text-muted">or use email</span>
-        <span className="h-px flex-1 bg-border" />
       </div>
 
       {formError ? <Alert>{formError}</Alert> : null}

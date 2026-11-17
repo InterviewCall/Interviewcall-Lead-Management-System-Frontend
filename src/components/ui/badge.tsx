@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 import type { Tone } from "@/lib/roles";
 
 const TONE: Record<Tone, { box: string; dot: string }> = {
-  neutral: { box: "bg-surface-alt border border-border text-text-2", dot: "bg-muted" },
+  neutral: { box: "bg-bg text-text-2", dot: "bg-muted" },
   primary: { box: "bg-primary-soft text-primary", dot: "bg-primary" },
   success: { box: "bg-ok-soft text-ok", dot: "bg-ok" },
   warning: { box: "bg-warn-soft text-warn", dot: "bg-warn" },

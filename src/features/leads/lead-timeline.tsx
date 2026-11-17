@@ -9,7 +9,7 @@ import { fast, spring } from "@/lib/motion";
 import type { LeadDetail } from "./types";
 
 type Ev = LeadDetail["events"][number];
-type Filter = "all" | "stages" | "people" | "source";
+type Filter = "all" | "calls" | "stages" | "people" | "source";
 
 const KIND: Record<string, { icon: IconName; tone: string; group: Exclude<Filter, "all"> }> = {
   LEAD_CREATED: { icon: "plus", tone: "bg-surface-alt text-text-2", group: "source" },
@@ -17,12 +17,25 @@ const KIND: Record<string, { icon: IconName; tone: string; group: Exclude<Filter
   FORM_SUBMITTED: { icon: "note", tone: "bg-info-soft text-info", group: "source" },
   SLOT_BOOKED: { icon: "calendar", tone: "bg-primary-soft text-primary", group: "stages" },
   BOOKING_COMPLETED: { icon: "check", tone: "bg-ok-soft text-ok", group: "stages" },
+  BOOKING_CANCELLED: { icon: "x", tone: "bg-bad-soft text-bad", group: "stages" },
+  BOOKING_RESCHEDULED: { icon: "calendar", tone: "bg-primary-soft text-primary", group: "stages" },
+  BOOKING_REOPENED: { icon: "refresh", tone: "bg-info-soft text-info", group: "stages" },
   ASSIGNED: { icon: "user", tone: "bg-info-soft text-info", group: "people" },
   OPPORTUNITY_OPENED: { icon: "target", tone: "bg-primary-soft text-primary", group: "stages" },
   OPPORTUNITY_STAGE_CHANGED: { icon: "arrowR", tone: "bg-primary-soft text-primary", group: "stages" },
   OPPORTUNITY_WON: { icon: "check", tone: "bg-ok-soft text-ok", group: "stages" },
   OPPORTUNITY_LOST: { icon: "x", tone: "bg-bad-soft text-bad", group: "stages" },
   CONTACT_STAGE_CHANGED: { icon: "swap", tone: "bg-violet-soft text-violet", group: "stages" },
+  ACTIVITY_LOGGED: { icon: "phone", tone: "bg-primary-soft text-primary", group: "calls" },
+  TASK_CREATED: { icon: "clock", tone: "bg-info-soft text-info", group: "calls" },
+  TASK_DONE: { icon: "check", tone: "bg-ok-soft text-ok", group: "calls" },
+  TASK_CANCELLED: { icon: "x", tone: "bg-surface-alt text-text-2", group: "calls" },
+  TEMPERATURE_CHANGED: { icon: "zap", tone: "bg-warn-soft text-warn", group: "calls" },
+  DETAILS_EDITED: { icon: "edit", tone: "bg-surface-alt text-text-2", group: "source" },
+  DO_NOT_CONTACT_SET: { icon: "x", tone: "bg-bad-soft text-bad", group: "source" },
+  DO_NOT_CONTACT_CLEARED: { icon: "check", tone: "bg-ok-soft text-ok", group: "source" },
+  LEAD_ANONYMISED: { icon: "userX", tone: "bg-bad-soft text-bad", group: "source" },
+  LEADS_MERGED: { icon: "link", tone: "bg-violet-soft text-violet", group: "source" },
 };
 const kindOf = (type: string) => KIND[type] ?? { icon: "info" as IconName, tone: "bg-surface-alt text-text-2", group: "source" as const };
 
@@ -40,16 +53,17 @@ function dayLabel(iso: string): string {
 
 const FILTERS: Array<{ value: Filter; label: string }> = [
   { value: "all", label: "Everything" },
+  { value: "calls", label: "Calls and notes" },
   { value: "stages", label: "Stage changes" },
   { value: "people", label: "Assignments" },
   { value: "source", label: "Source and imports" },
 ];
 
 /** What happened to the lead, newest first, grouped by day. New events slide in at the top. */
-export function LeadTimeline({ events }: { events: Ev[] }) {
+export function LeadTimeline({ events, notes = {} }: { events: Ev[]; /** The notes of logged activities, by activity id. */ notes?: Record<string, string | null> }) {
   const [filter, setFilter] = useState<Filter>("all");
   const counts = useMemo(() => {
-    const c: Record<Filter, number> = { all: events.length, stages: 0, people: 0, source: 0 };
+    const c: Record<Filter, number> = { all: events.length, calls: 0, stages: 0, people: 0, source: 0 };
     for (const e of events) c[kindOf(e.type).group]++;
     return c;
   }, [events]);
@@ -112,6 +126,9 @@ export function LeadTimeline({ events }: { events: Ev[] }) {
                         <div className="flex min-w-0 flex-1 flex-col">
                           <span className="text-body font-medium text-text">{e.title}</span>
                           <span className="text-small text-text-2">{e.sub}</span>
+                          {e.ref && notes[e.ref] ? (
+                            <p className="mt-1.5 max-w-prose rounded-lg bg-surface-alt px-3 py-2 text-body whitespace-pre-wrap text-text">{notes[e.ref]}</p>
+                          ) : null}
                         </div>
                         <time dateTime={e.at} title={`${dayFormat.format(new Date(e.at))}, ${timeFormat.format(new Date(e.at))}`} className="shrink-0 pt-0.5 text-small whitespace-nowrap text-muted">
                           {relativeTime(e.at)}

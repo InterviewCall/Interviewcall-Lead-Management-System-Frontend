@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { CommandPalette } from "./command-palette";
 import { MobileHeader, TabBar } from "./mobile-chrome";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
@@ -11,8 +12,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // A lead's page is a workspace: on large screens the page itself stays still and its panes scroll.
   const workspace = /^\/leads\/[^/]+$/.test(pathname);
-  // The leads table has many columns: it gets the full width of the screen instead of the narrow reading column.
-  const wide = pathname === "/leads";
+  // Wide tables and the pipeline board get the full width of the screen instead of the narrow reading column.
+  const wide = pathname === "/leads" || pathname === "/pipeline";
   return (
     <div className="flex min-h-dvh bg-bg">
       <Sidebar />
@@ -25,6 +26,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
       <TabBar />
+      <CommandPalette />
     </div>
   );
 }

@@ -11,6 +11,7 @@ const CORRECT_ROLES: readonly Role[] = ["ADMIN", "SALES_MANAGER"];
 
 export const canMark = (role: Role) => MARK_ROLES.includes(role);
 export const canCloseWon = (role: Role) => role !== "BDA" && canMark(role);
+export const canOnboard = (role: Role) => ONBOARD_ROLES.includes(role);
 
 /** The contact stages in the order the handbook tells the story, with what each one means. */
 export const CONTACT_STAGES: Array<{ code: LifecycleCode; hint: string }> = [

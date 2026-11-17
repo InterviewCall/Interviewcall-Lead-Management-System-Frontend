@@ -1,24 +1,25 @@
-import type { Stage } from "@/mock/types";
+import type { StageCode } from "@/features/leads/types";
 
 /** Segment colours for the stage mix bar. They follow the stage badge tones. */
-export const STAGE_COLOR: Record<Stage, string> = {
-  "Call 1 Pending": "#9ca3af",
-  "Call 1": "#0284c7",
-  Test: "#7c3aed",
-  "Call 2": "#4f46e5",
-  "Psychometric session": "#a78bfa",
-  "Decision / Objection": "#d97706",
-  "Payment / Financing": "#f59e0b",
-  "Closed Won": "#16a34a",
+export const STAGE_COLOR: Record<StageCode, string> = {
+  CALL_1_PENDING: "#8c91ab",
+  CALL_1: "#1f73b7",
+  TEST: "#7a3be0",
+  CALL_2: "#4f46e5",
+  PSYCHOMETRIC_SESSION: "#a98bf0",
+  DECISION_OBJECTION: "#d9821a",
+  PAYMENT_FINANCING: "#e9a23b",
+  CLOSED_WON: "#138a48",
 };
 
-export const STAGE_SHORT: Record<Stage, string> = {
-  "Call 1 Pending": "Call 1 Pending",
-  "Call 1": "Call 1",
-  Test: "Test",
-  "Call 2": "Call 2",
-  "Psychometric session": "Psychometric",
-  "Decision / Objection": "Decision / Objection",
-  "Payment / Financing": "Payment / Financing",
-  "Closed Won": "Closed Won",
+/** Shorter names for the places that are tight (phone tabs, the legend). */
+export const STAGE_SHORT: Record<StageCode, string> = {
+  CALL_1_PENDING: "Call 1 Pending",
+  CALL_1: "Call 1",
+  TEST: "Test",
+  CALL_2: "Call 2",
+  PSYCHOMETRIC_SESSION: "Psychometric",
+  DECISION_OBJECTION: "Decision / Objection",
+  PAYMENT_FINANCING: "Payment / Financing",
+  CLOSED_WON: "Closed Won",
 };

@@ -9,8 +9,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/field";
-import { Icon } from "@/components/ui/icon";
-import { Modal } from "@/components/ui/modal";
+import { Icon, type IconName } from "@/components/ui/icon";
 import { PageHeader } from "@/components/ui/page-header";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
@@ -21,10 +20,14 @@ import { errorMessage } from "@/lib/api/errors";
 import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
 import { fast, spring } from "@/lib/motion";
+import { exportLeads } from "./api";
 import { useLeadFilters, useLeads } from "./hooks";
-import { formatPhone, LIFECYCLE, LifecycleChip, NextStepText, ScoreChip, STAGE, STAGE_ORDER, StageChip, TempChip } from "./lead-display";
-import { CONTACT_STAGES } from "./marking";
-import type { LeadQuery, LeadView, LifecycleCode, StageCode, TemperatureCode } from "./types";
+import { filtersOf, sameFilters, SaveViewModal, useDeleteView, useSavedViews } from "./saved-views";
+import { NewLeadModal } from "./lead-form-modal";
+import { formatPhone, LIFECYCLE, LifecycleText, NextStepText, ScoreChip, STAGE, STAGE_ORDER, StageMeter, TempChip } from "./lead-display";
+import { BulkStageModal, BulkTaskModal } from "./bulk-actions";
+import { canMark, canOnboard, CONTACT_STAGES } from "./marking";
+import type { LeadQuery, LeadView, LifecycleCode, SavedView, StageCode, TemperatureCode } from "./types";
 
 const PAGE_SIZE = 25;
 const TEMPS: TemperatureCode[] = ["HOT", "WARM", "COLD"];
@@ -34,6 +37,18 @@ function stageFromParam(value: string | null): StageCode | "" {
   if (!value) return "";
   return STAGE_ORDER.find((c) => c === value || STAGE[c].label === value) ?? "";
 }
+
+/** A day as YYYY-MM-DD in India time, `back` days before today. */
+function istDay(back = 0): string {
+  return new Date(Date.now() + 5.5 * 3600_000 - back * 86_400_000).toISOString().slice(0, 10);
+}
+
+const DATE_PRESETS: Array<{ label: string; range: () => { from: string; to: string } }> = [
+  { label: "Today", range: () => ({ from: istDay(), to: istDay() }) },
+  { label: "Last 7 days", range: () => ({ from: istDay(6), to: istDay() }) },
+  { label: "Last 30 days", range: () => ({ from: istDay(29), to: istDay() }) },
+  { label: "This month", range: () => ({ from: `${istDay().slice(0, 8)}01`, to: istDay() }) },
+];
 
 const VIEWS: Array<{ value: LeadView; label: string }> = [
   { value: "all", label: "All leads" },
@@ -58,9 +73,14 @@ export function LeadsScreen() {
   const [ownerId, setOwnerId] = useState("");
   const [listId, setListId] = useState(params.get("list") ?? "");
   const [temperature, setTemperature] = useState<TemperatureCode | "">("");
+  const [from, setFrom] = useState(params.get("from") ?? "");
+  const [to, setTo] = useState(params.get("to") ?? "");
+  const [moreOpen, setMoreOpen] = useState(Boolean(params.get("from") || params.get("to")));
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [assignOpen, setAssignOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState<"assign" | "stage" | "task" | null>(null);
   const filters = useLeadFilters();
   const canSeeOwners = user?.role !== "BDA";
   const newOpen = params.get("new") === "1";
@@ -74,19 +94,68 @@ export function LeadsScreen() {
   }, [searchInput]);
 
   const query = useMemo<LeadQuery>(
-    () => ({ view, search, sourceId, stage, lifecycle, ownerId, listId, temperature, page, pageSize: PAGE_SIZE }),
-    [view, search, sourceId, stage, lifecycle, ownerId, listId, temperature, page],
+    () => ({ view, search, sourceId, stage, lifecycle, ownerId, listId, temperature, from, to, page, pageSize: PAGE_SIZE }),
+    [view, search, sourceId, stage, lifecycle, ownerId, listId, temperature, from, to, page],
   );
+  const savedViews = useSavedViews();
+  const deleteView = useDeleteView();
+  const current = useMemo(() => filtersOf(query), [query]);
+  const activeSaved = savedViews.data?.find((v) => sameFilters(v.filters, current));
+  const canExport = user?.role === "ADMIN" || user?.role === "SALES_MANAGER";
+  const dateError = from && to && from > to ? "The end date comes before the start date" : "";
+  const anyFilter = sourceId !== null || stage || lifecycle || ownerId || listId || temperature || searchInput || from || to;
+
+  function apply(v: SavedView) {
+    const f = v.filters;
+    setView(f.view ?? "all");
+    setSearchInput(f.search ?? "");
+    setSearch(f.search ?? "");
+    setSourceId(f.sourceId ?? null);
+    setTemperature(f.temperature ?? "");
+    setStage(f.stage ?? "");
+    setLifecycle(f.lifecycle ?? "");
+    setOwnerId(f.ownerId ?? "");
+    setListId(f.listId ?? "");
+    setFrom(f.from ?? "");
+    setTo(f.to ?? "");
+    setMoreOpen(Boolean(f.from || f.to));
+    setPage(1);
+  }
+
+  async function download() {
+    setExporting(true);
+    try {
+      const { blob, filename } = await exportLeads(query);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.show(`${filename} downloaded`, "success");
+    } catch (e) {
+      toast.show(errorMessage(e), "error");
+    } finally {
+      setExporting(false);
+    }
+  }
   const leads = useLeads(query);
   const data = leads.data;
   const total = data?.total ?? 0;
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const to = Math.min(page * PAGE_SIZE, total);
+  const rowFrom = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rowTo = Math.min(page * PAGE_SIZE, total);
 
   const resetPage = () => setPage(1);
   const rows = data?.leads ?? [];
   const allSelected = rows.length > 0 && rows.every((l) => selected.has(l.id));
+
+  function finishBulk() {
+    setBulkOpen(null);
+    setSelected(new Set());
+  }
 
   function toggle(id: string) {
     setSelected((s) => {
@@ -97,10 +166,6 @@ export function LeadsScreen() {
     });
   }
 
-  function bulk() {
-    toast.show("Bulk actions arrive in a later step. Your leads are real.", "info");
-  }
-
   return (
     <>
       <PageHeader
@@ -108,7 +173,9 @@ export function LeadsScreen() {
         subtitle={data ? `${formatNumber(data.counts.all)} leads · ${formatNumber(data.counts.unassigned)} unassigned · ${formatNumber(data.counts.booked)} with a booked call` : "Loading…"}
         actions={
           <>
-            <Button variant="secondary" icon="download" onClick={() => toast.show("Export arrives in a later step.", "info")}>Export CSV</Button>
+            {canExport ? (
+              <Button variant="secondary" icon="download" loading={exporting} disabled={Boolean(dateError) || total === 0} onClick={() => void download()} title={total === 0 ? "No leads to export" : `Download the ${formatNumber(Math.min(total, 5000))} leads in this list${total > 5000 ? " (the first 5,000)" : ""}`}>Export CSV</Button>
+            ) : null}
             {user && IMPORT_ROLES.includes(user.role) ? (
               <Link href="/imports" className="inline-flex h-9 items-center gap-2 rounded-lg border border-border-strong bg-surface px-3.5 text-body font-medium text-text hover:bg-surface-alt">
                 <Icon name="upload" size={16} /> Import CSV
@@ -121,7 +188,7 @@ export function LeadsScreen() {
 
       <div role="tablist" aria-label="Saved views" className="flex gap-6 overflow-x-auto border-b border-border">
         {VIEWS.map((v) => {
-          const active = v.value === view;
+          const active = !activeSaved && v.value === view;
           return (
             <button
               key={v.value}
@@ -141,9 +208,35 @@ export function LeadsScreen() {
             </button>
           );
         })}
-        <button type="button" onClick={() => toast.show("Saved views arrive in a later step.", "info")} className="flex items-center gap-1.5 pb-2 text-body font-medium whitespace-nowrap text-primary">
-          <Icon name="plus" size={14} /> Save view
-        </button>
+        {savedViews.data?.map((v) => {
+          const active = activeSaved?.id === v.id;
+          const canDelete = v.mine || user?.role === "ADMIN";
+          return (
+            <span key={v.id} className="group/view relative flex items-center">
+              <button
+                role="tab"
+                aria-selected={active}
+                onClick={() => apply(v)}
+                title={v.shared ? `Shared by ${v.by}` : "Your saved view"}
+                className={cn("relative flex items-center gap-1.5 px-1 pt-1 pb-3 text-body font-medium whitespace-nowrap transition-colors", active ? "text-primary" : "text-text-2 hover:text-text")}
+              >
+                {active ? <m.span layoutId="leads-view-underline" transition={spring} className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary" /> : null}
+                {v.shared ? <Icon name="users" size={13} /> : null}
+                {v.name}
+              </button>
+              {canDelete ? (
+                <button type="button" aria-label={`Delete the view ${v.name}`} onClick={() => deleteView.mutate(v)} className="-ml-0.5 mb-2 flex size-5 items-center justify-center rounded text-muted opacity-0 transition group-hover/view:opacity-100 focus-visible:opacity-100 hover:bg-bad-soft hover:text-bad">
+                  <Icon name="x" size={12} />
+                </button>
+              ) : null}
+            </span>
+          );
+        })}
+        {!activeSaved ? (
+          <button type="button" onClick={() => setSaveOpen(true)} className="flex items-center gap-1.5 pb-2 text-body font-medium whitespace-nowrap text-primary">
+            <Icon name="plus" size={14} /> Save view
+          </button>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -179,24 +272,48 @@ export function LeadsScreen() {
           {TEMPS.map((t) => <option key={t} value={t}>{t.charAt(0) + t.slice(1).toLowerCase()}</option>)}
         </Select>
         <AnimatePresence initial={false}>
-          {sourceId !== null || stage || lifecycle || ownerId || listId || temperature || searchInput ? (
+          {anyFilter ? (
             <m.button
               key="clear"
               type="button"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1, transition: fast }}
               exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.1 } }}
-              onClick={() => { setSourceId(null); setStage(""); setLifecycle(""); setOwnerId(""); setListId(""); setTemperature(""); setSearchInput(""); setSearch(""); resetPage(); router.replace("/leads"); }}
+              onClick={() => { setSourceId(null); setStage(""); setLifecycle(""); setOwnerId(""); setListId(""); setTemperature(""); setSearchInput(""); setSearch(""); setFrom(""); setTo(""); resetPage(); router.replace("/leads"); }}
               className="flex h-9 items-center gap-1.5 rounded-lg px-3 text-body font-medium text-text-2 hover:bg-black/5"
             >
               <Icon name="x" size={14} /> Clear filters
             </m.button>
           ) : null}
         </AnimatePresence>
-        <button type="button" onClick={() => toast.show("More filters arrive in a later step.", "info")} className="flex h-9 items-center gap-1.5 px-3 text-body font-medium text-primary">
-          <Icon name="filter" size={14} /> More filters
+        <button type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)} className="flex h-9 items-center gap-1.5 px-3 text-body font-medium text-primary">
+          <Icon name="filter" size={14} /> More filters{from || to ? " · 1" : ""}
         </button>
       </div>
+      <AnimatePresence initial={false}>
+        {moreOpen ? (
+          <m.div key="more" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={fast} className="overflow-hidden">
+            <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-surface px-4 py-3">
+              <label className="flex flex-col gap-1 text-small font-medium text-text-2">
+                Added from
+                <input type="date" value={from} max={to || undefined} onChange={(e) => { setFrom(e.target.value); resetPage(); }} className="h-9 rounded-lg border border-border-strong bg-surface px-3 text-body font-normal text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+              </label>
+              <label className="flex flex-col gap-1 text-small font-medium text-text-2">
+                Added to
+                <input type="date" value={to} min={from || undefined} onChange={(e) => { setTo(e.target.value); resetPage(); }} className="h-9 rounded-lg border border-border-strong bg-surface px-3 text-body font-normal text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+              </label>
+              <div className="flex flex-wrap gap-1.5 pb-0.5">
+                {DATE_PRESETS.map((p) => (
+                  <button key={p.label} type="button" onClick={() => { const r = p.range(); setFrom(r.from); setTo(r.to); resetPage(); }} className="h-7 rounded-full bg-surface px-3 text-small font-medium text-text-2 ring-1 ring-border transition hover:text-text">{p.label}</button>
+                ))}
+                {from || to ? <button type="button" onClick={() => { setFrom(""); setTo(""); resetPage(); }} className="h-7 rounded-full px-3 text-small font-medium text-primary hover:bg-primary-soft">Any date</button> : null}
+              </div>
+              {dateError ? <p role="alert" className="w-full text-small text-bad">{dateError}</p> : null}
+            </div>
+          </m.div>
+        ) : null}
+      </AnimatePresence>
+      <SaveViewModal filters={current} canShare={canExport} open={saveOpen} onClose={() => setSaveOpen(false)} onSaved={() => undefined} />
 
       <Card className="overflow-hidden">
         <AnimatePresence initial={false}>
@@ -211,11 +328,14 @@ export function LeadsScreen() {
           >
             <span className="text-body font-medium text-primary">{selected.size} selected</span>
             {canDistribute(user?.role) ? (
-              <button type="button" onClick={() => setAssignOpen(true)} className="h-[30px] rounded-md bg-surface px-3 text-small font-medium text-text shadow-sm">Assign to…</button>
+              <BulkButton icon="shuffle" onClick={() => setBulkOpen("assign")}>Assign to…</BulkButton>
             ) : null}
-            {["Change lifecycle", "Add task"].map((label) => (
-              <button key={label} type="button" onClick={bulk} className="h-[30px] rounded-md bg-surface px-3 text-small font-medium text-text shadow-sm">{label}</button>
-            ))}
+            {user && (canMark(user.role) || canOnboard(user.role)) ? (
+              <BulkButton icon="target" onClick={() => setBulkOpen("stage")}>Change contact stage</BulkButton>
+            ) : null}
+            {user && canMark(user.role) ? (
+              <BulkButton icon="clock" onClick={() => setBulkOpen("task")}>Add follow-up</BulkButton>
+            ) : null}
             <span className="flex-1" />
             <button type="button" onClick={() => setSelected(new Set())} className="text-small font-medium text-primary">Clear selection</button>
           </m.div>
@@ -240,21 +360,27 @@ export function LeadsScreen() {
                         className="size-[18px] accent-primary"
                       />
                     </th>
-                    {["Lead", "Source", "Contact stage", "Pipeline stage", "Temp.", "Score", "Owner", "Next step"].map((h) => (
-                      <th key={h} className="px-2 text-cap font-semibold tracking-[0.5px] text-text-2 uppercase">{h}</th>
+                    {["Lead", "Source", "Contact stage", "Pipeline", "Heat", "Score", "Owner", "Next step"].map((h) => (
+                      <th key={h} className="px-2 text-small font-medium text-text-2">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {leads.isPending ? (
-                    <tr><td colSpan={9} className="py-16 text-center"><Spinner className="mx-auto text-primary" /></td></tr>
+                    Array.from({ length: 8 }, (_, i) => (
+                      <tr key={i} className="h-[64px] border-b border-border last:border-b-0">
+                        <td className="px-3"><span className="block size-[18px] rounded bg-bg" /></td>
+                        <td className="px-2"><span className="flex items-center gap-2.5"><span className="size-8 animate-pulse rounded-full bg-bg" /><span className="flex flex-col gap-1.5"><span className="h-3 w-32 animate-pulse rounded bg-bg" /><span className="h-2.5 w-44 animate-pulse rounded bg-bg/70" /></span></span></td>
+                        {[64, 96, 104, 56, 56, 96, 96].map((w, j) => <td key={j} className="px-2"><span className="block h-3 animate-pulse rounded bg-bg" style={{ width: w }} /></td>)}
+                      </tr>
+                    ))
                   ) : rows.length === 0 ? (
-                    <tr><td colSpan={9} className="py-16 text-center text-body text-text-2">No leads match these filters.</td></tr>
+                    <tr><td colSpan={9}><EmptyLeads /></td></tr>
                   ) : (
                     rows.map((lead) => {
                       const isSelected = selected.has(lead.id);
                       return (
-                        <tr key={lead.id} onClick={() => router.push(`/leads/${lead.id}`)} className={cn("h-[60px] cursor-pointer border-b border-border last:border-b-0 hover:bg-surface-alt", isSelected && "bg-primary-soft hover:bg-primary-soft")}>
+                        <tr key={lead.id} onClick={() => router.push(`/leads/${lead.id}`)} className={cn("group/row h-[64px] cursor-pointer border-b border-border last:border-b-0 transition-colors hover:bg-surface-alt", isSelected && "bg-primary-soft/70 hover:bg-primary-soft")}>
                           <td className="px-3" onClick={(e) => e.stopPropagation()}>
                             <input type="checkbox" aria-label={`Select ${lead.name}`} checked={isSelected} onChange={() => toggle(lead.id)} className="size-[18px] accent-primary" />
                           </td>
@@ -262,17 +388,17 @@ export function LeadsScreen() {
                             <Link href={`/leads/${lead.id}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-2.5">
                               <Avatar name={lead.name} />
                               <span className="flex min-w-0 flex-col">
-                                <span className="truncate text-body font-medium text-text">{lead.name}</span>
+                                <span className="truncate text-body font-semibold text-text group-hover/row:text-primary">{lead.name}</span>
                                 <span className="truncate text-small text-text-2">{lead.email ?? formatPhone(lead.phone)}</span>
                               </span>
                             </Link>
                           </td>
                           <td className="px-2 text-body whitespace-nowrap text-text-2">{lead.source}</td>
-                          <td className="px-2"><LifecycleChip code={lead.lifecycle} /></td>
-                          <td className="px-2"><StageChip code={lead.stage} /></td>
+                          <td className="px-2"><LifecycleText code={lead.lifecycle} /></td>
+                          <td className="px-2"><StageMeter code={lead.stage} /></td>
                           <td className="px-2"><TempChip code={lead.temperature} /></td>
                           <td className="px-2"><ScoreChip score={lead.score} /></td>
-                          <td className="px-2">{lead.owner ? <span className="flex items-center gap-2"><Avatar name={lead.owner.name} size={24} /><span className="truncate text-body text-text">{lead.owner.name}</span></span> : <span className="text-small text-muted">Unassigned</span>}</td>
+                          <td className="px-2">{lead.owner ? <span className="flex items-center gap-2"><Avatar name={lead.owner.name} size={24} /><span className="truncate text-body text-text">{lead.owner.name}</span></span> : <span className="flex items-center gap-2 text-small font-medium text-warn"><span className="size-6 rounded-full border-[1.5px] border-dashed border-warn/60" />Unassigned</span>}</td>
                           <td className="px-2"><NextStepText next={lead.next} /></td>
                         </tr>
                       );
@@ -287,7 +413,7 @@ export function LeadsScreen() {
               {leads.isPending ? (
                 <li className="py-12 text-center"><Spinner className="mx-auto text-primary" /></li>
               ) : rows.length === 0 ? (
-                <li className="py-12 text-center text-body text-text-2">No leads match these filters.</li>
+                <li><EmptyLeads /></li>
               ) : (
                 rows.map((lead) => (
                   <li key={lead.id}>
@@ -300,7 +426,7 @@ export function LeadsScreen() {
                         </span>
                         <TempChip code={lead.temperature} />
                       </span>
-                      <span className="flex flex-wrap items-center gap-2"><StageChip code={lead.stage} /><ScoreChip score={lead.score} /><NextStepText next={lead.next} /></span>
+                      <span className="flex flex-wrap items-end gap-x-4 gap-y-2"><StageMeter code={lead.stage} /><NextStepText next={lead.next} /></span>
                     </Link>
                   </li>
                 ))
@@ -310,7 +436,7 @@ export function LeadsScreen() {
         )}
 
         <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3">
-          <p className="text-small text-text-2">{total === 0 ? "No leads" : `Showing ${from}–${to} of ${formatNumber(total)} leads`}</p>
+          <p className="text-small text-text-2">{total === 0 ? "No leads" : `Showing ${rowFrom}–${rowTo} of ${formatNumber(total)} leads`}</p>
           <div className="flex gap-2">
             <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
             <Button variant="secondary" disabled={page >= lastPage} onClick={() => setPage((p) => p + 1)}>Next</Button>
@@ -318,22 +444,32 @@ export function LeadsScreen() {
         </div>
       </Card>
 
-      {assignOpen ? <AssignLeadsModal leadIds={[...selected]} onClose={() => setAssignOpen(false)} onDone={() => { setAssignOpen(false); setSelected(new Set()); }} /> : null}
+      {bulkOpen === "assign" ? <AssignLeadsModal leadIds={[...selected]} onClose={() => setBulkOpen(null)} onDone={finishBulk} /> : null}
+      {bulkOpen === "stage" && user ? <BulkStageModal leadIds={[...selected]} role={user.role} onClose={() => setBulkOpen(null)} onDone={finishBulk} /> : null}
+      {bulkOpen === "task" ? <BulkTaskModal leadIds={[...selected]} onClose={() => setBulkOpen(null)} onDone={finishBulk} /> : null}
       <NewLeadModal open={newOpen} onClose={() => router.replace("/leads")} />
     </>
   );
 }
 
-function NewLeadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { user } = useAuth();
-  const canImport = user ? IMPORT_ROLES.includes(user.role) : false;
-  if (!open) return null;
+/** Nothing matches: say so, and offer the way back to everything. */
+function EmptyLeads() {
   return (
-    <Modal open title="New lead" subtitle="Adding a single lead by hand arrives in a later step." onClose={onClose} width={480}
-      footer={<><Button variant="secondary" onClick={onClose}>Close</Button>{canImport ? <Link href="/imports" className="inline-flex h-9 items-center rounded-lg bg-cta px-3.5 text-body font-medium text-white shadow-cta hover:brightness-110">Import a CSV</Link> : null}</>}>
-      <p className="text-body text-text-2">
-        {canImport ? "To add leads today, import a CSV file. Duplicates are skipped by email and phone, and every new lead gets its first stage and score." : "To add leads today, ask an admin or sales manager to import a CSV file."}
-      </p>
-    </Modal>
+    <div className="flex flex-col items-center gap-2 px-4 py-16 text-center">
+      <span className="flex size-11 items-center justify-center rounded-full bg-bg text-muted"><Icon name="search" size={20} /></span>
+      <p className="text-body font-semibold text-text">No leads match these filters</p>
+      <p className="max-w-[44ch] text-small text-text-2">Try a different search, or clear the filters to see every lead you can open.</p>
+      <Link href="/leads" className="mt-1 text-body font-medium text-primary hover:underline">Clear filters</Link>
+    </div>
+  );
+}
+
+/** A button in the bar that appears when leads are selected. */
+function BulkButton({ icon, onClick, children }: { icon: IconName; onClick: () => void; children: string }) {
+  return (
+    <button type="button" onClick={onClick} className="flex h-[30px] items-center gap-1.5 rounded-md bg-surface px-3 text-small font-medium text-text shadow-sm transition hover:text-primary hover:shadow">
+      <Icon name={icon} size={14} className="text-text-2" />
+      {children}
+    </button>
   );
 }

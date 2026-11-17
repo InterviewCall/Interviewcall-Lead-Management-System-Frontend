@@ -1,103 +1,13 @@
 import { api } from "@/lib/api/client";
-import { addMockEvent, mockDetailFor, type LeadDetail as MockLeadDetail } from "@/mock/lead-detail";
-import { MOCK_LEADS, findMockLead } from "@/mock/leads";
-import type { MockLead, Stage, Temperature } from "@/mock/types";
-import type { LeadDetail, LeadFilters, LeadPage, LeadQuery, LifecycleCode, LostReason, StageCode } from "./types";
-
-/**
- * MOCK: the leads API does not exist yet. When it does, replace the bodies with
- * `api.get("/leads", { params })` and keep the signatures.
- */
-const wait = (ms = 250) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+import type { BulkResult, CustomValue, SavedFilters, SavedView, Enrolment, Engagement, Lead, LeadDetail, LeadFilters, LeadPage, LeadQuery, LifecycleCode, LogActivityInput, LostReason, Outcome, StageCode } from "./types";
 
 export const leadKeys = {
   list: (q: LeadQuery) => ["leads", "list", q] as const,
   filters: ["leads", "filters"] as const,
   real: (id: string) => ["leads", "real", id] as const,
-  detail: (id: string) => ["leads", "detail", id] as const,
   full: (id: string) => ["leads", "full", id] as const,
+  engagement: (id: string) => ["leads", "engagement", id] as const,
 };
-
-export async function getLead(id: string): Promise<MockLead | null> {
-  await wait(150);
-  return findMockLead(id) ?? null;
-}
-
-export interface NewLeadInput { name: string; email: string; phone: string; source: string }
-
-export async function createLead(input: NewLeadInput): Promise<MockLead> {
-  await wait(300);
-  const lead: MockLead = {
-    id: `lead-new-${MOCK_LEADS.length + 1}`,
-    name: input.name,
-    email: input.email,
-    phone: input.phone,
-    source: input.source,
-    lifecycle: "Marketing Lead",
-    stage: "Call 1 Pending",
-    temperature: "Cold",
-    owner: null,
-    next: { text: "Not contacted yet", kind: "none" },
-    createdAt: new Date().toISOString(),
-  };
-  MOCK_LEADS.unshift(lead);
-  return lead;
-}
-
-export interface LeadWithDetail { lead: MockLead; detail: MockLeadDetail }
-
-export async function getLeadDetail(id: string): Promise<LeadWithDetail | null> {
-  await wait(200);
-  const lead = findMockLead(id);
-  return lead ? { lead, detail: mockDetailFor(lead) } : null;
-}
-
-export interface LogCallInput {
-  leadId: string;
-  outcome: "Connected" | "No answer" | "Busy" | "Wrong number";
-  stage: Stage;
-  temperature: Temperature;
-  notes: string;
-  action: string;
-  due: string;
-}
-
-export async function logCall(input: LogCallInput): Promise<void> {
-  await wait(350);
-  const lead = findMockLead(input.leadId);
-  if (!lead) throw new Error("Lead not found");
-  if (lead.stage !== input.stage) lead.stageChangedAt = new Date().toISOString();
-  lead.stage = input.stage;
-  lead.temperature = input.temperature;
-  lead.next = { text: `${input.action} · ${input.due}`, kind: "task" };
-  addMockEvent(input.leadId, {
-    id: `call-${Date.now()}`,
-    title: "You logged a call",
-    sub: input.outcome,
-    detail: input.notes || undefined,
-    when: "Just now",
-    tone: "info",
-    kind: "call",
-  });
-}
-
-export async function moveStage(id: string, stage: Stage): Promise<void> {
-  await wait(250);
-  const lead = findMockLead(id);
-  if (!lead) throw new Error("Lead not found");
-  lead.stage = stage;
-  lead.stageChangedAt = new Date().toISOString();
-  if (stage === "Closed Won") lead.lifecycle = "Customer";
-  addMockEvent(id, { id: `stage-${Date.now()}`, title: `Moved to ${stage}`, sub: "Opportunity stage changed by you", when: "Just now", tone: "primary", kind: "system" });
-}
-
-export async function markLost(id: string, reason: string): Promise<void> {
-  await wait(250);
-  const lead = findMockLead(id);
-  if (!lead) throw new Error("Lead not found");
-  lead.lifecycle = "Lost";
-  addMockEvent(id, { id: `lost-${Date.now()}`, title: "Marked as lost", sub: reason || "No reason given", when: "Just now", tone: "danger", kind: "system" });
-}
 
 // ---- the real leads API ----
 
@@ -110,7 +20,51 @@ export async function listLeads(q: LeadQuery): Promise<LeadPage> {
   if (q.lifecycle) params.lifecycle = q.lifecycle;
   if (q.ownerId) params.ownerId = q.ownerId;
   if (q.listId) params.listId = q.listId;
+  if (q.from) params.from = q.from;
+  if (q.to) params.to = q.to;
   const { data } = await api.get<LeadPage>("/leads", { params });
+  return data;
+}
+
+/** The leads these filters match, as a CSV file the browser saves. Managers and admins; at most 5,000 rows. */
+export async function exportLeads(q: LeadQuery): Promise<{ blob: Blob; filename: string }> {
+  const params: Record<string, string | number> = { view: q.view };
+  if (q.search.trim()) params.search = q.search.trim();
+  if (q.sourceId !== null) params.sourceId = q.sourceId;
+  if (q.temperature) params.temperature = q.temperature;
+  if (q.stage) params.stage = q.stage;
+  if (q.lifecycle) params.lifecycle = q.lifecycle;
+  if (q.ownerId) params.ownerId = q.ownerId;
+  if (q.listId) params.listId = q.listId;
+  if (q.from) params.from = q.from;
+  if (q.to) params.to = q.to;
+  const res = await api.get<Blob>("/leads/export", { params, responseType: "blob" });
+  const name = /filename="([^"]+)"/.exec(String(res.headers["content-disposition"] ?? ""))?.[1];
+  return { blob: res.data, filename: name ?? "leads.csv" };
+}
+
+// ---- saved views ----
+
+export const savedViewKeys = { all: ["leads", "saved-views"] as const };
+
+export async function listSavedViews(): Promise<SavedView[]> {
+  const { data } = await api.get<{ views: SavedView[] }>("/saved-views");
+  return data.views;
+}
+
+export async function createSavedView(input: { name: string; filters: SavedFilters; shared: boolean }): Promise<SavedView> {
+  const { data } = await api.post<SavedView>("/saved-views", input);
+  return data;
+}
+
+export async function deleteSavedView(id: string): Promise<void> {
+  await api.delete(`/saved-views/${id}`);
+}
+
+// ---- custom field values ----
+
+export async function setCustomValues(id: string, values: Record<string, CustomValue>): Promise<LeadDetail> {
+  const { data } = await api.patch<LeadDetail>(`/leads/${id}/custom`, { values });
   return data;
 }
 
@@ -131,6 +85,16 @@ export async function setContactStage(id: string, stage: LifecycleCode): Promise
   return data;
 }
 
+export async function setDoNotContact(id: string, input: { value: boolean; reason?: string }): Promise<LeadDetail> {
+  const { data } = await api.post<LeadDetail>(`/leads/${id}/do-not-contact`, input);
+  return data;
+}
+
+export async function anonymiseLead(id: string, reason: string): Promise<{ id: string; anonymised: true }> {
+  const { data } = await api.post<{ id: string; anonymised: true }>(`/leads/${id}/anonymise`, { reason });
+  return data;
+}
+
 export async function moveOpportunity(id: string, stage: StageCode): Promise<LeadDetail> {
   const { data } = await api.post<LeadDetail>(`/leads/${id}/opportunity/stage`, { stage });
   return data;
@@ -148,5 +112,127 @@ export async function reopenOpportunity(id: string): Promise<LeadDetail> {
 
 export async function fetchLostReasons(): Promise<LostReason[]> {
   const { data } = await api.get<LostReason[]>("/pipeline/lost-reasons");
+  return data;
+}
+
+// ---- calls, messages, notes and follow-ups ----
+
+export async function fetchOutcomes(): Promise<Outcome[]> {
+  const { data } = await api.get<Outcome[]>("/engagement/outcomes");
+  return data;
+}
+
+export async function fetchEngagement(id: string): Promise<Engagement> {
+  const { data } = await api.get<Engagement>(`/leads/${id}/engagement`);
+  return data;
+}
+
+/** Answers with the refreshed lead, like the other markings. */
+export async function logActivity(id: string, input: LogActivityInput): Promise<LeadDetail> {
+  const { data } = await api.post<LeadDetail>(`/leads/${id}/activities`, input);
+  return data;
+}
+
+export async function createTask(id: string, input: { title: string; dueAt: string }): Promise<Engagement> {
+  const { data } = await api.post<Engagement>(`/leads/${id}/tasks`, input);
+  return data;
+}
+
+export async function updateTask(taskId: string, input: { title?: string; dueAt?: string; assigneeId?: string }): Promise<Engagement> {
+  const { data } = await api.patch<Engagement>(`/tasks/${taskId}`, input);
+  return data;
+}
+
+export async function completeTask(taskId: string): Promise<Engagement> {
+  const { data } = await api.post<Engagement>(`/tasks/${taskId}/complete`);
+  return data;
+}
+
+export async function cancelTask(taskId: string): Promise<Engagement> {
+  const { data } = await api.post<Engagement>(`/tasks/${taskId}/cancel`);
+  return data;
+}
+
+// ---- adding and editing leads ----
+
+export interface NewLeadInput {
+  fullName: string;
+  phone: string | null;
+  email: string | null;
+  sourceId: number;
+  /** Managers and admins only; a BDA always owns what they add. Null leaves it for the Assignment queue. */
+  ownerId: string | null;
+  currentCompany: string | null;
+  currentCtc: string | null;
+  graduationYear: string | null;
+  domain: string | null;
+}
+
+/** A person already in the CRM, as a 409 LEAD_EXISTS describes them. `id` is null when you may not open the lead. */
+export interface ExistingLead {
+  id: string | null;
+  name: string | null;
+  owner: { id: string; name: string } | null;
+  canOpen: boolean;
+}
+
+export async function createLead(input: NewLeadInput): Promise<{ id: string }> {
+  const { data } = await api.post<{ id: string }>("/leads", input);
+  return data;
+}
+
+export type LeadEdit = Partial<Pick<NewLeadInput, "fullName" | "phone" | "email" | "currentCompany" | "currentCtc" | "graduationYear" | "domain">>;
+
+export async function editLead(id: string, input: LeadEdit): Promise<LeadDetail> {
+  const { data } = await api.patch<LeadDetail>(`/leads/${id}`, input);
+  return data;
+}
+
+export async function fetchAssignees(): Promise<Array<{ id: string; name: string; role: string }>> {
+  const { data } = await api.get<{ assignees: Array<{ id: string; name: string; role: string }> }>("/assignment/assignees");
+  return data.assignees;
+}
+
+export async function changeOwner(id: string, toUserId: string): Promise<void> {
+  await api.post("/assignment/bulk", { leadIds: [id], toUserId });
+}
+
+// ---- winning, payments and merging ----
+
+export type PaymentInput = Omit<Enrolment, "updatedAt">;
+
+/** Closes the open opportunity as won, with the payment agreed. */
+export async function markWon(id: string, input: PaymentInput): Promise<LeadDetail> {
+  const { data } = await api.post<LeadDetail>(`/leads/${id}/opportunity/won`, input);
+  return data;
+}
+
+/** Records or updates the payment of the latest won deal. */
+export async function savePayment(id: string, input: PaymentInput): Promise<LeadDetail> {
+  const { data } = await api.put<LeadDetail>(`/leads/${id}/enrolment`, input);
+  return data;
+}
+
+/** Leads with the same name: likely duplicates. */
+export async function fetchDuplicates(id: string): Promise<Lead[]> {
+  const { data } = await api.get<{ leads: Lead[] }>(`/leads/${id}/duplicates`);
+  return data.leads;
+}
+
+/** Merges `duplicateId` into this lead, which is kept. */
+export async function mergeLead(id: string, duplicateId: string): Promise<LeadDetail> {
+  const { data } = await api.post<LeadDetail>(`/leads/${id}/merge`, { duplicateId });
+  return data;
+}
+
+// ---- bulk actions on the leads list ----
+
+export async function bulkContactStage(leadIds: string[], stage: LifecycleCode): Promise<BulkResult> {
+  const { data } = await api.post<BulkResult>("/leads/contact-stage/bulk", { leadIds, stage });
+  return data;
+}
+
+export async function bulkAddFollowUp(leadIds: string[], input: { title: string; dueAt: string }): Promise<BulkResult> {
+  const { data } = await api.post<BulkResult>("/leads/tasks/bulk", { leadIds, ...input });
   return data;
 }

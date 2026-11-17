@@ -20,6 +20,11 @@ export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
+/** Rupees in the Indian way: ₹1,20,000. */
+export function formatRupees(value: number): string {
+  return `₹${value.toLocaleString("en-IN")}`;
+}
+
 export function formatNumber(value: number): string {
   return value.toLocaleString("en-IN");
 }

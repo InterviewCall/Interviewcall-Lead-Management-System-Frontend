@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/field";
 import { Icon } from "@/components/ui/icon";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { RowMenu, type MenuItem } from "@/components/ui/menu";
+import { MoveLeadsModal } from "@/features/assignment/move-leads-modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { Segmented, type SegmentOption } from "@/components/ui/segmented";
 import { Spinner } from "@/components/ui/spinner";
@@ -74,6 +75,7 @@ export function TeamScreen() {
   });
   const counts = useStaffCounts();
   const deactivate = useDeactivateStaff();
+  const [moving, setMoving] = useState<StaffMember | null>(null);
   const reactivate = useReactivateStaff();
   const reset = useResetStaffPassword();
 
@@ -94,12 +96,17 @@ export function TeamScreen() {
 
   function menuFor(member: StaffMember): MenuItem[] {
     const isSelf = member.id === user?.id;
+    // Anyone who can own leads can have them moved on: a leaver above all.
+    const moveLeads: MenuItem[] = member.role === "BDA" || member.role === "SALES_MANAGER" || member.role === "ADMIN"
+      ? [{ label: "Move their leads", icon: "swap", onSelect: () => setMoving(member) }]
+      : [];
     if (member.status === "DEACTIVATED") {
-      return [{ label: "Reactivate", icon: "userCheck", onSelect: () => setPending({ kind: "reactivate", member }) }];
+      return [{ label: "Reactivate", icon: "userCheck", onSelect: () => setPending({ kind: "reactivate", member }) }, ...moveLeads];
     }
     return [
       { label: "Edit details", icon: "edit", onSelect: () => setEditing(member) },
       { label: "Reset password", icon: "key", onSelect: () => setPending({ kind: "reset", member }) },
+      ...moveLeads,
       ...(isSelf ? [] : [{ label: "Deactivate", icon: "userX" as const, danger: true, onSelect: () => setPending({ kind: "deactivate", member }) }]),
     ];
   }
@@ -116,7 +123,14 @@ export function TeamScreen() {
       setPending(null);
     };
     if (kind === "deactivate") {
-      deactivate.mutate(member.id, { onSuccess: done(`${member.name} is deactivated and signed out everywhere.`), onError: failed });
+      deactivate.mutate(member.id, {
+        onSuccess: () => {
+          done(`${member.name} is deactivated and signed out everywhere.`)();
+          // Their leads would otherwise sit with nobody: offer to move them straight away.
+          if (member.role === "BDA" || member.role === "SALES_MANAGER") setMoving(member);
+        },
+        onError: failed,
+      });
     } else if (kind === "reactivate") {
       reactivate.mutate(member.id, { onSuccess: done(`${member.name} is active again. A new one-time password was emailed.`), onError: failed });
     } else {
@@ -199,7 +213,7 @@ export function TeamScreen() {
                 <thead>
                   <tr className="h-10 border-b border-border bg-surface-alt">
                     {["User", "Role", "Status", "Last seen", ""].map((h) => (
-                      <th key={h || "actions"} className="px-4 text-cap font-semibold tracking-[0.5px] text-text-2 uppercase">{h}</th>
+                      <th key={h || "actions"} className="px-4 text-small font-medium text-text-2">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -265,6 +279,7 @@ export function TeamScreen() {
 
       <InviteModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
       <EditStaffModal member={editing} isSelf={editing?.id === user?.id} onClose={() => setEditing(null)} />
+      <MoveLeadsModal person={moving} onClose={() => setMoving(null)} />
 
       <ConfirmDialog
         open={pending?.kind === "deactivate"}
@@ -275,7 +290,7 @@ export function TeamScreen() {
         onConfirm={confirm}
         onCancel={() => setPending(null)}
       >
-        They are signed out everywhere and cannot sign in until you reactivate them. Their history stays.
+        They are signed out everywhere and cannot sign in until you reactivate them. Their history stays. Next you can move the leads they hold to other BDAs.
       </ConfirmDialog>
       <ConfirmDialog
         open={pending?.kind === "reactivate"}

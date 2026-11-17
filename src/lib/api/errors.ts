@@ -7,6 +7,8 @@ export class ApiError extends Error {
   readonly fields?: Record<string, string>;
   /** Seconds to wait, from the Retry-After header on a 429. */
   readonly retryAfter?: number;
+  /** On a 409 about a duplicate, the record that is already there. */
+  readonly existing?: Record<string, unknown>;
 
   constructor(init: {
     status: number;
@@ -14,6 +16,7 @@ export class ApiError extends Error {
     message: string;
     fields?: Record<string, string>;
     retryAfter?: number;
+    existing?: Record<string, unknown>;
   }) {
     super(init.message);
     this.name = "ApiError";
@@ -21,6 +24,7 @@ export class ApiError extends Error {
     this.code = init.code;
     this.fields = init.fields;
     this.retryAfter = init.retryAfter;
+    this.existing = init.existing;
   }
 }
 
@@ -28,6 +32,7 @@ interface ErrorBody {
   code?: unknown;
   message?: unknown;
   fields?: unknown;
+  existing?: unknown;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -63,6 +68,7 @@ export function toApiError(error: unknown): ApiError {
           : "Something went wrong. Please try again.",
       fields,
       retryAfter: Number.isFinite(retryHeader) && retryHeader > 0 ? retryHeader : undefined,
+      existing: isRecord(body.existing) ? body.existing : undefined,
     });
   }
   return new ApiError({

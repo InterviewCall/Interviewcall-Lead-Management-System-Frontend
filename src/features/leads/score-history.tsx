@@ -1,16 +1,110 @@
 "use client";
 
-import { m } from "motion/react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, m } from "motion/react";
+import { useState } from "react";
 import { AnimatedValue } from "@/components/motion/animated-value";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { useToast } from "@/components/ui/toast";
+import { useAuth } from "@/features/auth/auth-provider";
+import { api } from "@/lib/api/client";
+import { errorMessage } from "@/lib/api/errors";
 import { cn } from "@/lib/cn";
-import { relativeTime } from "@/lib/format";
+import { formatNumber, relativeTime } from "@/lib/format";
 import { fast } from "@/lib/motion";
-import type { LeadDetail } from "./types";
+import { LIFECYCLE, STAGE } from "./lead-display";
+import type { LeadDetail, LifecycleCode, StageCode } from "./types";
+
+const REASONS: Record<string, string> = {
+  IMPORT_INITIAL: "Starting score from the import file",
+  VSL_FORM_SCORE: "VSL form score",
+  VSL_DETAILS: "Gave details on the VSL page",
+  VSL_SLOT_BOOKED: "Booked a counselling call",
+  VSL_CALL_ATTENDED: "Attended the booked call",
+  CALL_CONNECTED: "Connected call",
+  CLOSED_WON: "Closed as won",
+};
 
 /** Human words for the reasons score points are given. */
 export function reasonLabel(reason: string): string {
-  if (reason === "IMPORT_INITIAL") return "Starting score from the import file";
+  if (REASONS[reason]) return REASONS[reason];
+  if (reason.startsWith("CONTACT_STAGE_")) {
+    const code = reason.slice("CONTACT_STAGE_".length) as LifecycleCode;
+    if (LIFECYCLE[code]) return code === "NOT_INTERESTED" || code === "EXHAUSTED_NOT_CONNECTED" ? `Marked ${LIFECYCLE[code].label}` : `Became ${LIFECYCLE[code].label}`;
+  }
+  if (reason.startsWith("PIPELINE_")) {
+    const code = reason.slice("PIPELINE_".length) as StageCode;
+    if (STAGE[code]) return `Reached ${STAGE[code].label}`;
+  }
   return reason.toLowerCase().split("_").map((w, i) => (i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w)).join(" ");
+}
+
+interface ScoreRule {
+  label: string;
+  /** Null for the VSL form, which adds its own 0 to 100. */
+  points: number | null;
+  once: boolean;
+}
+
+/** How the score grows, so nobody wonders why it moved (or did not). Admins can also catch up old leads here. */
+function ScoreRules() {
+  const { user } = useAuth();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const rules = useQuery({
+    queryKey: ["scores", "rules"],
+    queryFn: async () => (await api.get<{ rules: ScoreRule[] }>("/scores/rules")).data.rules,
+    staleTime: 5 * 60_000,
+    enabled: open,
+  });
+  const recalc = useMutation({
+    mutationFn: async () => (await api.post<{ events: number; leads: number; points: number }>("/scores/recalculate")).data,
+    onSuccess: (r) => {
+      toast.show(r.leads === 0 ? "Every lead's score was already up to date." : `Scores caught up: ${formatNumber(r.leads)} ${r.leads === 1 ? "lead" : "leads"} changed.`, "success");
+      for (const key of ["leads", "pipeline", "my-day"]) void queryClient.invalidateQueries({ queryKey: [key] });
+    },
+    onError: (e) => toast.show(errorMessage(e), "error"),
+  });
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-card">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-alt/60">
+        <span className="flex size-8 items-center justify-center rounded-lg bg-primary-soft text-primary"><Icon name="zap" size={16} /></span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="text-body font-semibold text-text">How the score grows</span>
+          <span className="text-small text-text-2">It goes up on its own as the lead engages and moves forward</span>
+        </span>
+        <m.span animate={{ rotate: open ? 90 : 0 }} className="text-text-2"><Icon name="right" size={16} /></m.span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open ? (
+          <m.div key="rules" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={fast} className="overflow-hidden border-t border-border">
+            <ul className="flex flex-col px-4 py-2">
+              {(rules.data ?? []).map((r) => (
+                <li key={r.label} className="flex items-center gap-3 py-1.5">
+                  <span className="min-w-0 flex-1 text-body text-text">{r.label}</span>
+                  <span className="text-small text-muted">{r.points === null ? "its score, 0 to 100" : r.once ? "once" : "each time"}</span>
+                  {r.points === null ? null : (
+                    <span className={cn("nums w-11 rounded-md py-0.5 text-center text-small font-semibold", r.points >= 0 ? "bg-ok-soft text-ok" : "bg-bad-soft text-bad")}>{r.points > 0 ? "+" : ""}{r.points}</span>
+                  )}
+                </li>
+              ))}
+              {rules.isPending ? <li className="py-3 text-small text-text-2">Loading the rules…</li> : null}
+              {rules.isError ? <li className="py-3 text-small text-bad">{errorMessage(rules.error)}</li> : null}
+            </ul>
+            {user?.role === "ADMIN" ? (
+              <div className="flex items-center gap-3 border-t border-border bg-surface-alt px-4 py-3">
+                <p className="min-w-0 flex-1 text-small text-text-2">Leads from before scoring started can be caught up from their history. Nothing is counted twice.</p>
+                <Button variant="secondary" icon="refresh" loading={recalc.isPending} onClick={() => recalc.mutate()}>Catch up all leads</Button>
+              </div>
+            ) : null}
+          </m.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
 }
 
 /** The running total as a line that draws itself, then every entry that built it. */
@@ -50,8 +144,9 @@ export function ScoreHistory({ score, entries }: { score: number; entries: LeadD
           <p className="mt-3 text-small text-text-2">The line appears once the lead has more than one entry. The score grows as the lead engages.</p>
         )}
       </div>
+      <ScoreRules />
       {entries.length === 0 ? (
-        <p className="py-8 text-center text-body text-text-2">No points yet.</p>
+        <p className="py-6 text-center text-body text-text-2">No points yet. They arrive as the lead engages.</p>
       ) : (
         <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-card">
           {entries.map((s, i) => (

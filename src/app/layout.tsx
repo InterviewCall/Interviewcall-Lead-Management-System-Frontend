@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import "@fontsource-variable/inter";
+import "@fontsource-variable/instrument-sans";
+import "@fontsource-variable/bricolage-grotesque/standard.css";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0f1733",
+  themeColor: "#151834",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -2,13 +2,13 @@
 
 import { AnimatePresence, m } from "motion/react";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { AnimatedValue } from "@/components/motion/animated-value";
 import { Alert } from "@/components/ui/alert";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Icon } from "@/components/ui/icon";
 import { Segmented } from "@/components/ui/segmented";
 import { Spinner } from "@/components/ui/spinner";
@@ -17,22 +17,40 @@ import { useAuth } from "@/features/auth/auth-provider";
 import { ApiError, errorMessage } from "@/lib/api/errors";
 import { cn } from "@/lib/cn";
 import { fast } from "@/lib/motion";
+import { canDistribute } from "@/features/assignment/handover";
 import { AboutPanel } from "./about-panel";
+import { CustomValuesModal } from "./custom-values-modal";
+import { AnonymiseModal } from "./anonymise-modal";
+import { DoNotContactModal } from "./dnc-modal";
+import { EditLeadModal } from "./lead-form-modal";
+import { QueueBar } from "@/features/my-day/queue-bar";
+import { MergeModal } from "./merge-modal";
+import { OwnerModal } from "./owner-modal";
+import { PaymentModal, PaymentStrip } from "./payment-modal";
 import { ContactStageMenu } from "./contact-stage-menu";
-import { useLeadDetail, useMarkLead } from "./hooks";
+import { FollowUpsPanel } from "./follow-ups-panel";
+import { useEngagement, useLeadDetail, useMarkLead } from "./hooks";
 import { LeadTimeline } from "./lead-timeline";
+import { LogCallModal } from "./log-call-modal";
 import { LIFECYCLE, STAGE, TempChip } from "./lead-display";
+import { CallSummary } from "./call-summary";
 import { canCloseWon, canMark } from "./marking";
 import { MarkLostModal } from "./mark-lost-modal";
 import { ScoreHistory } from "./score-history";
 import { StagePath } from "./stage-path";
+import { TaskModal } from "./task-modal";
 import type { LeadDetail, LifecycleCode, StageCode } from "./types";
 
 type Tab = "timeline" | "details" | "score";
 
 export function LeadDetailScreen({ id }: { id: string }) {
   const q = useLeadDetail(id);
-  if (q.isPending) return <div className="py-24 text-center"><Spinner size={24} className="mx-auto text-primary" /></div>;
+  const router = useRouter();
+  const mergedInto = q.error instanceof ApiError && q.error.code === "LEAD_MERGED" ? (q.error.existing?.id as string | undefined) : undefined;
+  useEffect(() => {
+    if (mergedInto) router.replace(`/leads/${mergedInto}`);
+  }, [mergedInto, router]);
+  if (q.isPending || mergedInto) return <div className="py-24 text-center"><Spinner size={24} className="mx-auto text-primary" /></div>;
   if (q.isError) {
     const missing = q.error instanceof ApiError && (q.error.status === 404 || q.error.status === 400);
     return missing ? (
@@ -55,11 +73,21 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
   const [tab, setTab] = useState<Tab>("timeline");
   const [lostOpen, setLostOpen] = useState(false);
   const [winTarget, setWinTarget] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [taskOpen, setTaskOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [ownerOpen, setOwnerOpen] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [dncOpen, setDncOpen] = useState(false);
+  const [eraseOpen, setEraseOpen] = useState(false);
+  const engagement = useEngagement(id);
+  const notes = Object.fromEntries((engagement.data?.activities ?? []).map((a) => [a.id, a.notes]));
   const { lead, opportunity, events, scoreEntries, vsl } = data;
   const role = user?.role ?? "OPS";
   const editable = canMark(role);
   const busy = mark.contactStage.isPending || mark.moveStage.isPending || mark.lose.isPending || mark.reopen.isPending;
-  const soon = (what: string) => toast.show(`${what} arrives with the calls and tasks step. Everything you see here is real.`, "info");
   const digits = lead.phone?.replace(/\D/g, "") ?? "";
 
   const fail = (e: unknown) => toast.show(errorMessage(e), "error");
@@ -82,23 +110,29 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
   }
 
   const lost = opportunity?.status === "LOST";
+  const won = opportunity?.status === "WON";
+  // Payments after the win are kept by managers and admins (a closer stops seeing a lead once it is won).
+  const canEditPayment = role === "ADMIN" || role === "SALES_MANAGER";
   return (
     <div className="flex min-h-0 flex-col gap-4 lg:h-full">
       {/* ---- the header stays put; only the panes below it scroll ---- */}
-      <m.header initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0, transition: fast }} className="shrink-0 rounded-xl border border-border bg-surface shadow-card">
+      <m.header initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0, transition: fast }} className="shrink-0 rounded-card border border-border bg-surface shadow-card">
         <div className="flex flex-wrap items-start gap-x-4 gap-y-3 px-4 pt-4 sm:px-5">
           <Link href="/leads" aria-label="Back to leads" className="mt-1 hidden size-8 shrink-0 items-center justify-center rounded-lg border border-border text-text-2 transition hover:bg-surface-alt lg:flex">
             <Icon name="back" size={16} />
           </Link>
-          <Avatar name={lead.name} size={52} className="text-h2" />
+          <span className={cn("rounded-full p-[3px] ring-2", lead.temperature === "HOT" ? "ring-hot" : lead.temperature === "WARM" ? "ring-warm" : lead.temperature === "COLD" ? "ring-cold" : "ring-border")} title={lead.temperature ? `${lead.temperature.toLowerCase()} lead` : "Not rated yet"}>
+            <Avatar name={lead.name} size={48} className="text-h2" />
+          </span>
           <div className="flex min-w-0 flex-1 basis-60 flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <h1 className="min-w-0 text-h1 font-bold text-text sm:text-[22px]">{lead.name}</h1>
+              <h1 className="min-w-0 font-display text-h1 font-bold text-text">{lead.name}</h1>
               <ContactStageMenu current={lead.lifecycle} role={role} editable={editable} busy={busy} onPick={changeContactStage} />
               <TempChip code={lead.temperature} />
-              <span className="inline-flex h-7 items-center gap-1 rounded-full bg-surface-alt px-2.5 text-small font-medium text-text-2 ring-1 ring-border" title="Lead score">
-                <Icon name="zap" size={12} className="text-primary" />
-                <AnimatedValue value={lead.score} className="tabular-nums" />
+              <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-primary-soft px-2.5 text-small font-medium text-primary" title="Lead score">
+                <Icon name="zap" size={12} />
+                <AnimatedValue value={lead.score} className="nums font-semibold" />
+                <span className="text-primary/70">score</span>
               </span>
               {lead.doNotContact ? <Badge tone="danger">Do not contact</Badge> : null}
             </div>
@@ -120,8 +154,8 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
                 <Icon name="msg" size={16} /> WhatsApp
               </a>
             ) : null}
-            <Button variant="secondary" icon="note" onClick={() => soon("Logging a call")}>Log call</Button>
-            <Button variant="secondary" icon="plus" onClick={() => soon("Tasks")}>Task</Button>
+            {editable ? <Button variant="secondary" icon="note" onClick={() => setLogOpen(true)}>Log activity</Button> : null}
+            {editable ? <Button variant="secondary" icon="plus" onClick={() => setTaskOpen(true)}>Task</Button> : null}
           </div>
         </div>
 
@@ -139,6 +173,8 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
                   </button>
                 ) : null}
               </div>
+              {opportunity.status === "OPEN" ? <CallSummary activities={engagement.data?.activities ?? []} stage={opportunity.stage} /> : null}
+              {won ? <PaymentStrip enrolment={opportunity.enrolment} canEdit={canEditPayment} onEdit={() => setPaymentOpen(true)} /> : null}
               <AnimatePresence initial={false}>
                 {lost ? (
                   <m.div key="lost" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto", transition: fast }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
@@ -175,7 +211,7 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
         <m.aside initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0, transition: { ...fast, delay: 0.05 } }} className={cn("thin-scroll lg:w-[320px] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain xl:w-[340px]", tab === "details" ? "block" : "hidden lg:block")}>
-          <AboutPanel lead={lead} vsl={vsl} />
+          <AboutPanel lead={lead} vsl={vsl} onEdit={editable ? () => setEditOpen(true) : undefined} onEditCustom={editable ? () => setCustomOpen(true) : undefined} onChangeOwner={canDistribute(role) ? () => setOwnerOpen(true) : undefined} onMerge={canDistribute(role) ? () => setMergeOpen(true) : undefined} onDoNotContact={editable && (!lead.doNotContact || canDistribute(role)) ? () => setDncOpen(true) : undefined} onErase={role === "ADMIN" ? () => setEraseOpen(true) : undefined} />
         </m.aside>
 
         <m.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { ...fast, delay: 0.1 } }} className={cn("flex min-w-0 flex-1 flex-col lg:min-h-0", tab === "details" ? "hidden lg:flex" : "flex")}>
@@ -183,6 +219,7 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
             <Segmented ariaLabel="Activity" value={tab === "score" ? "score" : "timeline"} onChange={setTab} options={[{ value: "timeline", label: "Timeline", count: events.length }, { value: "score", label: "Score history" }]} />
           </div>
           <div className="thin-scroll lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
+            <FollowUpsPanel leadId={id} editable={editable} />
             <AnimatePresence mode="wait" initial={false}>
               {tab === "score" ? (
                 <m.div key="score" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0, transition: fast }} exit={{ opacity: 0, transition: { duration: 0.08 } }}>
@@ -190,7 +227,7 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
                 </m.div>
               ) : (
                 <m.div key="timeline" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0, transition: fast }} exit={{ opacity: 0, transition: { duration: 0.08 } }}>
-                  <LeadTimeline events={events} />
+                  <LeadTimeline events={events} notes={notes} />
                 </m.div>
               )}
             </AnimatePresence>
@@ -211,9 +248,16 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
             <Icon name="msg" size={16} /> WhatsApp
           </a>
         ) : null}
-        <Button variant="secondary" className="h-10" icon="note" onClick={() => soon("Logging a call")} aria-label="Log call" />
+        {editable ? <Button variant="secondary" className="h-10" icon="note" onClick={() => setLogOpen(true)} aria-label="Log activity" /> : null}
+        {editable ? <Button variant="secondary" className="h-10" icon="plus" onClick={() => setTaskOpen(true)} aria-label="Add follow-up" /> : null}
       </div>
 
+      <QueueBar leadId={id} />
+      <LogCallModal detail={data} open={logOpen} onClose={() => setLogOpen(false)} />
+      <TaskModal leadId={id} leadName={lead.name} open={taskOpen} onClose={() => setTaskOpen(false)} />
+      <EditLeadModal lead={lead} open={editOpen} onClose={() => setEditOpen(false)} />
+      <CustomValuesModal lead={lead} open={customOpen} onClose={() => setCustomOpen(false)} />
+      <OwnerModal lead={lead} open={ownerOpen} onClose={() => setOwnerOpen(false)} />
       <MarkLostModal
         open={lostOpen}
         leadName={lead.name}
@@ -222,16 +266,11 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
         onClose={() => { setLostOpen(false); mark.lose.reset(); }}
         onConfirm={(input) => mark.lose.mutate(input, { onSuccess: () => { setLostOpen(false); toast.show("Marked as lost"); } })}
       />
-      <ConfirmDialog
-        open={winTarget}
-        title="Close as won?"
-        confirmLabel="Close as won"
-        loading={mark.moveStage.isPending}
-        onCancel={() => setWinTarget(false)}
-        onConfirm={() => mark.moveStage.mutate("CLOSED_WON", { onSuccess: () => { setWinTarget(false); toast.show(`${lead.name} is now Enrolled`); }, onError: (e) => { setWinTarget(false); fail(e); } })}
-      >
-        Only do this after payment or financing is complete. The opportunity closes as won, the contact stage becomes Enrolled, and all pre-sales communication stops. Only a manager can move an enrolled lead back.
-      </ConfirmDialog>
+      <PaymentModal leadId={id} leadName={lead.name} mode="won" current={null} open={winTarget} onClose={() => setWinTarget(false)} />
+      <PaymentModal leadId={id} leadName={lead.name} mode="update" current={opportunity?.enrolment ?? null} open={paymentOpen} onClose={() => setPaymentOpen(false)} />
+      <MergeModal lead={lead} open={mergeOpen} onClose={() => setMergeOpen(false)} />
+      <DoNotContactModal lead={lead} open={dncOpen} onClose={() => setDncOpen(false)} />
+      <AnonymiseModal lead={lead} open={eraseOpen} onClose={() => setEraseOpen(false)} />
     </div>
   );
 }

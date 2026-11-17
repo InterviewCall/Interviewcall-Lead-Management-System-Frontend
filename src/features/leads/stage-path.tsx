@@ -62,9 +62,10 @@ export function StagePath({
               {...(clickable ? { type: "button" as const, onClick: () => onMove(code), title: `Move to ${STAGE[code].label}` } : {})}
               style={{ clipPath: shape }}
               className={cn(
-                "relative flex h-11 w-full items-center justify-center gap-1.5 px-5 text-center text-small leading-tight font-medium transition-colors",
+                "relative flex h-11 w-full items-center justify-center gap-1.5 px-5 text-center text-small leading-tight transition-colors",
+                isCurrent ? "font-semibold" : "font-medium",
                 i === 0 ? "pl-3" : "",
-                done || isCurrent ? "text-white" : "bg-surface-alt text-text-2",
+                isCurrent ? "text-white" : done ? (won ? "text-ok" : "text-primary") : "bg-surface-alt text-text-2",
                 clickable && "cursor-pointer hover:bg-primary-soft hover:text-primary focus-visible:bg-primary-soft focus-visible:text-primary",
                 !open && !isCurrent && !done && "opacity-70",
               )}
@@ -76,7 +77,7 @@ export function StagePath({
                 animate={{ scaleX: done || isCurrent ? 1 : 0 }}
                 transition={{ ...spring, delay: Math.min(i, current >= 0 ? current : i) * 0.05 }}
                 style={{ transformOrigin: "left" }}
-                className={cn("absolute inset-0", lostStep ? "bg-bad" : wonStep || (won && done) ? "bg-ok" : isCurrent ? "bg-primary" : "bg-primary/75")}
+                className={cn("absolute inset-0", lostStep ? "bg-bad" : wonStep ? "bg-ok" : won && done ? "bg-ok-soft" : isCurrent ? "bg-primary" : "bg-primary-soft")}
               />
               <span className="relative flex items-center gap-1.5">
                 {done && !isCurrent ? <Icon name="check" size={13} /> : null}

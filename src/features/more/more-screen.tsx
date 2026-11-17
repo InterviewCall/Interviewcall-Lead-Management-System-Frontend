@@ -38,7 +38,7 @@ export function MoreScreen() {
         </Section>
       ))}
 
-      <Section label="ACCOUNT">
+      <Section label="Account">
         <Row href="/change-password" icon="key" label="Change password" />
         <button type="button" onClick={() => logout.mutate()} disabled={logout.isPending} className="flex h-14 w-full items-center gap-3 px-4 text-left text-body font-medium text-bad disabled:opacity-60">
           <Icon name="logout" size={18} /> Sign out
@@ -51,7 +51,7 @@ export function MoreScreen() {
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-2">
-      <h2 className="px-1 text-cap font-semibold tracking-[0.5px] text-text-2 uppercase">{label}</h2>
+      <h2 className="px-1 text-small font-medium text-text-2">{label}</h2>
       <Card className="divide-y divide-border overflow-hidden">{children}</Card>
     </section>
   );

@@ -1,13 +1,16 @@
-import { BOOKED_SLOTS, FOLLOW_UPS, WEEK_CALLS, WEEK_CALLS_TOTAL } from "@/mock/my-day";
+import { api } from "@/lib/api/client";
+import type { MyDay } from "./types";
 
-/** MOCK: replace with the real "my day" endpoint when it exists. */
-export async function getMyDay() {
-  await new Promise((r) => setTimeout(r, 250));
-  return {
-    followUps: FOLLOW_UPS,
-    booked: BOOKED_SLOTS,
-    week: WEEK_CALLS,
-    weekTotal: WEEK_CALLS_TOTAL,
-    kpis: { due: 7, overdue: 2, booked: 5, unassigned: 3, newToday: 128, newDelta: "+18% vs yesterday", connect: "41%", connectDelta: "+3 pts vs last week" },
-  };
+export async function getMyDay(view: "mine" | "team" = "mine"): Promise<MyDay> {
+  const { data } = await api.get<MyDay>("/my-day", { params: { view } });
+  return data;
+}
+
+/** A manager or admin takes a booked call: its lead (and so the call) becomes theirs. */
+export async function takeLead(leadId: string, userId: string): Promise<void> {
+  await api.post("/assignment/bulk", { leadIds: [leadId], toUserId: userId });
+}
+
+export async function completeFollowUp(taskId: string): Promise<void> {
+  await api.post(`/tasks/${taskId}/complete`);
 }

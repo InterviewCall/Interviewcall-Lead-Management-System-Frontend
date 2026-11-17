@@ -1,73 +1,100 @@
-/**
- * MOCK: figures are fixed sample data scaled by the chosen range and source.
- * Swap for `api.get("/reports/summary", { params: { days, source } })`.
- */
-const wait = (ms = 300) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+import { api } from "@/lib/api/client";
+import type { StageCode } from "@/features/leads/types";
 
 export const RANGES = [{ days: 7, label: "Last 7 days" }, { days: 30, label: "Last 30 days" }, { days: 90, label: "Last 90 days" }] as const;
 export type RangeDays = (typeof RANGES)[number]["days"];
-export const REPORT_SOURCES = ["WorkR", "VSL", "Meta", "Other"] as const;
-export type ReportSource = (typeof REPORT_SOURCES)[number];
 
-const RANGE_SCALE: Record<RangeDays, number> = { 7: 0.24, 30: 1, 90: 2.9 };
+export type SourceGroup = "WORKR" | "VSL" | "META" | "ORGANIC" | "IMPORT" | "REFERRAL" | "OTHER";
 
-const FUNNEL: Array<[string, number]> = [
-  ["Call 1 Pending", 612], ["Call 1", 480], ["Test", 240], ["Call 2", 150],
-  ["Psychometric session", 96], ["Decision / Objection", 74], ["Payment / Financing", 52], ["Closed Won", 38],
-];
-const WEEKLY: Record<ReportSource, number[]> = {
-  WorkR: [370, 400, 390, 375],
-  VSL: [255, 270, 290, 250],
-  Meta: [150, 160, 165, 150],
-  Other: [65, 60, 60, 72],
+export const SOURCE_GROUP: Record<SourceGroup, { label: string; color: string }> = {
+  WORKR: { label: "WorkR", color: "#4f46e5" },
+  VSL: { label: "VSL", color: "#0284c7" },
+  META: { label: "Meta ads", color: "#d97706" },
+  ORGANIC: { label: "Organic", color: "#16a34a" },
+  IMPORT: { label: "CSV import", color: "#9ca3af" },
+  REFERRAL: { label: "Referral", color: "#a78bfa" },
+  OTHER: { label: "Other", color: "#64748b" },
 };
-const BDA_ROWS = [
-  { name: "Aarav Bose", leads: 482, contacted: 71, connect: 43, opps: 84, won: 6 },
-  { name: "Sneha Banerjee", leads: 471, contacted: 68, connect: 46, opps: 92, won: 8 },
-  { name: "Vikram Singh", leads: 455, contacted: 62, connect: 39, opps: 71, won: 4 },
-  { name: "Meera Pillai", leads: 468, contacted: 66, connect: 44, opps: 88, won: 7 },
-  { name: "Rahul Sen", leads: 440, contacted: 58, connect: 37, opps: 64, won: 3 },
-  { name: "Tanvi Shah", leads: 452, contacted: 63, connect: 41, opps: 79, won: 5 },
-];
-const LOST: Array<[string, number]> = [
-  ["Time constraint", 62], ["Financial constraint", 48], ["Self-preparation", 36], ["Out of target group", 31], ["Wrong number", 22], ["Not applicable", 15],
-];
 
-export interface ReportQuery { days: RangeDays; source: ReportSource | "" }
+export interface ReportQuery { days: RangeDays; source: SourceGroup | "" }
 
+/** Shape of `GET /api/v1/reports/summary`. */
 export interface Report {
-  kpis: { newLeads: number; contactedPct: number; opps: number; enrolled: number; newLeadsDelta: number; contactedDelta: number };
-  funnel: Array<{ stage: string; count: number; fromPrev: number | null }>;
-  weeks: Array<{ label: string; values: Record<ReportSource, number> }>;
-  sourcesShown: ReportSource[];
-  bdas: Array<{ name: string; leads: number; contactedPct: number; connectPct: number; opps: number; won: number }>;
+  days: RangeDays;
+  kpis: {
+    newLeads: number;
+    /** Percent against the period of the same length before. Null when there was nothing before. */
+    newLeadsChange: number | null;
+    /** Share of leads first called within an hour of arriving. Null when no lead can be judged yet. */
+    contactedPct: number | null;
+    /** Points against the period before. */
+    contactedChange: number | null;
+    opps: number;
+    enrolled: number;
+  };
+  funnel: Array<{ stage: StageCode; count: number; fromPrev: number | null }>;
+  /** Monday-to-Sunday weeks, oldest first; the last is this week so far. */
+  weeks: Array<{ weekStart: string; values: Record<SourceGroup, number> }>;
+  /** The source groups to offer in the picker. */
+  sources: SourceGroup[];
+  bdas: Array<{ id: string; name: string; leads: number; contactedPct: number | null; connectPct: number | null; opps: number; won: number; revenue: number }>;
   lost: { total: number; reasons: Array<{ reason: string; count: number }> };
+  /** Money from the deals won in the period. Amounts in whole rupees. */
+  revenue: {
+    booked: number;
+    collected: number;
+    pending: number;
+    averageFee: number | null;
+    /** Wins with no payment recorded yet. */
+    unrecorded: number;
+    byMode: Array<{ mode: "FULL" | "EMI" | "LOAN" | "PART"; deals: number; booked: number }>;
+  };
 }
 
-export const reportKeys = { summary: (q: ReportQuery) => ["reports", q] as const };
+export const reportKeys = { summary: (q: ReportQuery) => ["reports", "summary", q] as const };
 
 export async function getReport(q: ReportQuery): Promise<Report> {
-  await wait();
-  const weeklyTotal = (s: ReportSource) => WEEKLY[s].reduce((a, b) => a + b, 0);
-  const grand = REPORT_SOURCES.reduce((a, s) => a + weeklyTotal(s), 0);
-  const share = q.source ? weeklyTotal(q.source) / grand : 1;
-  const k = RANGE_SCALE[q.days] * share;
-  const scale = (n: number) => Math.round(n * k);
-  const funnel = FUNNEL.map(([stage, count], i) => ({ stage, count: scale(count), fromPrev: i === 0 ? null : Math.round((count / FUNNEL[i - 1]![1]) * 100) }));
-  const sourcesShown = q.source ? [q.source] : [...REPORT_SOURCES];
-  const lost = LOST.map(([reason, count]) => ({ reason, count: scale(count) }));
-  return {
-    kpis: {
-      newLeads: scale(grand), contactedPct: 64, opps: funnel[0]!.count, enrolled: funnel[7]!.count,
-      newLeadsDelta: 12, contactedDelta: 6,
-    },
-    funnel,
-    weeks: [1, 2, 3, 4].map((w) => ({
-      label: `Wk ${w}`,
-      values: Object.fromEntries(REPORT_SOURCES.map((s) => [s, q.source && q.source !== s ? 0 : Math.round(WEEKLY[s][w - 1]! * RANGE_SCALE[q.days])])) as Record<ReportSource, number>,
-    })),
-    sourcesShown,
-    bdas: BDA_ROWS.map((b) => ({ name: b.name, leads: scale(b.leads), contactedPct: b.contacted, connectPct: b.connect, opps: scale(b.opps), won: scale(b.won) })),
-    lost: { total: lost.reduce((a, r) => a + r.count, 0), reasons: lost },
+  const params: Record<string, string | number> = { days: q.days };
+  if (q.source) params.source = q.source;
+  const { data } = await api.get<Report>("/reports/summary", { params });
+  return data;
+}
+
+/** Shape of `GET /api/v1/reports/operations`. */
+export interface OperationsReport {
+  days: RangeDays;
+  firstResponse: {
+    targetMinutes: number;
+    leads: number;
+    judged: number;
+    withinTarget: number;
+    pct: number | null;
+    medianMinutes: number | null;
+    /** Leads past the target that nobody has touched. */
+    waiting: number;
+    buckets: Array<{ key: string; label: string; count: number }>;
+    byGroup: Array<{ group: SourceGroup; leads: number; pct: number | null; medianMinutes: number | null }>;
   };
+  stageAging: {
+    staleDays: number;
+    stages: Array<{ stage: StageCode; open: number; avgDays: number; maxDays: number; stale: number }>;
+    longest: Array<{ leadId: string; name: string; stage: StageCode; days: number; ownerName: string | null }>;
+  };
+  /** Null for a BDA. */
+  fairness: null | {
+    total: number;
+    expectedEach: number;
+    tolerancePct: number;
+    judgeable: boolean;
+    people: Array<{ id: string; name: string; assigned: number; hot: number; deepVsl: number; sharePct: number; hotPct: number | null; deepVslPct: number | null; deviationPct: number | null; flag: "over" | "under" | null }>;
+  };
+}
+
+export const operationsKeys = { all: (q: ReportQuery) => ["reports", "operations", q] as const };
+
+export async function getOperations(q: ReportQuery): Promise<OperationsReport> {
+  const params: Record<string, string | number> = { days: q.days };
+  if (q.source) params.source = q.source;
+  const { data } = await api.get<OperationsReport>("/reports/operations", { params });
+  return data;
 }

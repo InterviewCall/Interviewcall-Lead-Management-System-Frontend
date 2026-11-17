@@ -1,51 +1,36 @@
-import { BDAS } from "@/mock/people";
-import { stableHash, companyRole } from "@/mock/people";
-import { MOCK_LEADS } from "@/mock/leads";
-import type { MockLead, Temperature } from "@/mock/types";
+import { api } from "@/lib/api/client";
 
-/**
- * MOCK: assignment changes the sample leads in memory, so Leads and Pipeline reflect them.
- * Swap the bodies for `api.get("/assignment/queue")` and `api.post("/assignment/distribute")`.
- */
-const wait = (ms = 250) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/** The real assignment API: the waiting queue, the BDAs' loads, equal distribution, leave days and history. */
 
-export type VslDepth = "Booked slot" | "Full form" | "Details" | "Signup only";
-export const VSL_DEPTHS: VslDepth[] = ["Booked slot", "Full form", "Details", "Signup only"];
+export type VslDepth = "BOOKED" | "FORM" | "DETAILS" | "NONE";
+export const VSL_DEPTHS: VslDepth[] = ["BOOKED", "FORM", "DETAILS", "NONE"];
+export const DEPTH_LABEL: Record<VslDepth, string> = { BOOKED: "Booked slot", FORM: "Full form", DETAILS: "Details", NONE: "Signup only" };
+
+export type Temperature = "HOT" | "WARM" | "COLD";
+export const TEMPERATURES: Temperature[] = ["HOT", "WARM", "COLD"];
+export const TEMPERATURE_LABEL: Record<Temperature, string> = { HOT: "Hot", WARM: "Warm", COLD: "Cold" };
+
 export type QueueTab = "all" | "booked" | "hot";
 export type WaitBucket = "" | "lt6" | "6to24" | "gt24";
 
 export interface QueueItem {
-  lead: MockLead;
+  id: string;
+  name: string;
+  email: string | null;
+  company: string | null;
+  domain: string | null;
   depth: VslDepth;
+  temperature: Temperature | null;
+  source: string;
+  /** Whole hours since the person first came in. */
   waitingHours: number;
-  /** Second line under the name: the booked slot, or role and company. */
-  subtitle: string;
+  /** When the booked call is, if there is one. */
+  bookedAt: string | null;
 }
-
-function depthOf(lead: MockLead): VslDepth {
-  if (lead.next.kind === "booked") return "Booked slot";
-  if (lead.source.startsWith("VSL")) return stableHash(lead.id) % 2 === 0 ? "Full form" : "Details";
-  if (lead.source === "Meta ads") return "Details";
-  return "Signup only";
-}
-
-function toItem(lead: MockLead): QueueItem {
-  const depth = depthOf(lead);
-  const { company, role } = companyRole(lead);
-  return {
-    lead,
-    depth,
-    waitingHours: 1 + (stableHash(lead.id) % 36),
-    subtitle: depth === "Booked slot" ? lead.next.text : `${role} · ${company}`,
-  };
-}
-
-const DEPTH_RANK: Record<VslDepth, number> = { "Booked slot": 0, "Full form": 1, Details: 2, "Signup only": 3 };
-const TEMP_RANK: Record<Temperature, number> = { Hot: 0, Warm: 1, Cold: 2 };
 
 export interface QueueQuery {
   tab: QueueTab;
-  source: string;
+  sourceId: number | null;
   depth: VslDepth | "";
   temperature: Temperature | "";
   wait: WaitBucket;
@@ -54,18 +39,36 @@ export interface QueueQuery {
 
 export interface QueueData {
   items: QueueItem[];
-  /** Everything that matches the filters, for "select all". */
+  /** Everything that matches the filters (up to 2,000), for "select all". */
   matchingIds: string[];
   total: number;
   counts: Record<QueueTab, number>;
-  sources: string[];
+  sources: Array<{ id: number; name: string }>;
 }
 
 export interface BdaLoad {
+  id: string;
   name: string;
+  /** BDAs are in the round robin by default; sales managers can be added to it. */
+  role: "SALES_MANAGER" | "BDA";
+  /** Leads they hold that are still in play. */
   open: number;
+  /** Hot leads given to them in the last 7 days. */
   hotReceived: number;
-  leaveUntil?: string;
+  /** Last day away (YYYY-MM-DD), when on leave today. */
+  leaveUntil: string | null;
+}
+
+export interface LoadsData {
+  bdas: BdaLoad[];
+  /** The BDA who got the last lead of the last equal distribution; the next one continues after them. */
+  cursorUserId: string | null;
+}
+
+export interface DistributeResult {
+  assigned: number;
+  skipped: number;
+  perPerson: Array<{ id: string; name: string; count: number }>;
 }
 
 export interface HistoryEntry {
@@ -73,97 +76,61 @@ export interface HistoryEntry {
   at: string;
   by: string;
   count: number;
-  bdas: string[];
+  method: "BULK" | "EQUAL_DISTRIBUTION";
+  people: string[];
 }
-
-const history: HistoryEntry[] = [
-  { id: "h-seed-1", at: "2026-11-02T09:14:00.000Z", by: "Sunyul Hossen", count: 24, bdas: ["Aarav Bose", "Sneha Banerjee", "Vikram Singh", "Meera Pillai"] },
-  { id: "h-seed-2", at: "2026-11-01T06:02:00.000Z", by: "Sunyul Hossen", count: 3, bdas: ["Tanvi Shah"] },
-];
-
-/** Where the round robin carries on from, so the next batch starts after the last person. */
-let cursor = 0;
 
 export const assignmentKeys = {
   queue: (q: QueueQuery) => ["assignment", "queue", q] as const,
-  bdas: ["assignment", "bdas"] as const,
+  loads: ["assignment", "loads"] as const,
   history: ["assignment", "history"] as const,
+  summary: ["assignment", "summary"] as const,
 };
 
 export async function getQueue(q: QueueQuery): Promise<QueueData> {
-  await wait();
-  const all = MOCK_LEADS.filter((l) => l.owner === null && l.lifecycle !== "Lost" && l.stage !== "Closed Won").map(toItem);
-  const counts: Record<QueueTab, number> = {
-    all: all.length,
-    booked: all.filter((i) => i.depth === "Booked slot").length,
-    hot: all.filter((i) => i.lead.temperature === "Hot").length,
-  };
-  const filtered = all
-    .filter((i) => (q.tab === "booked" ? i.depth === "Booked slot" : q.tab === "hot" ? i.lead.temperature === "Hot" : true))
-    .filter((i) => !q.source || i.lead.source === q.source)
-    .filter((i) => !q.depth || i.depth === q.depth)
-    .filter((i) => !q.temperature || i.lead.temperature === q.temperature)
-    .filter((i) => (q.wait === "lt6" ? i.waitingHours < 6 : q.wait === "6to24" ? i.waitingHours >= 6 && i.waitingHours < 24 : q.wait === "gt24" ? i.waitingHours >= 24 : true))
-    .sort((a, b) => DEPTH_RANK[a.depth] - DEPTH_RANK[b.depth] || TEMP_RANK[a.lead.temperature] - TEMP_RANK[b.lead.temperature] || b.waitingHours - a.waitingHours);
-  return {
-    items: filtered.slice(0, q.limit),
-    matchingIds: filtered.map((i) => i.lead.id),
-    total: filtered.length,
-    counts,
-    sources: Array.from(new Set(all.map((i) => i.lead.source))).sort(),
-  };
+  const params: Record<string, string | number> = { tab: q.tab, limit: q.limit };
+  if (q.sourceId !== null) params.sourceId = q.sourceId;
+  if (q.depth) params.depth = q.depth;
+  if (q.temperature) params.temperature = q.temperature;
+  if (q.wait) params.wait = q.wait;
+  const { data } = await api.get<QueueData>("/assignment/queue", { params });
+  return data;
 }
 
-export async function getBdaLoads(): Promise<{ bdas: BdaLoad[]; cursorAfter: string | null }> {
-  await wait(150);
-  const bdas = BDAS.map((b) => ({
-    name: b.name,
-    leaveUntil: b.leaveUntil,
-    open: MOCK_LEADS.filter((l) => l.owner === b.name && l.stage !== "Closed Won" && l.lifecycle !== "Lost").length,
-    hotReceived: MOCK_LEADS.filter((l) => l.owner === b.name && l.temperature === "Hot").length,
-  }));
-  const available = BDAS.filter((b) => !b.leaveUntil);
-  return { bdas, cursorAfter: available.length ? available[(cursor - 1 + available.length) % available.length]!.name : null };
+export async function getWaitingCount(): Promise<number> {
+  const { data } = await api.get<{ waiting: number }>("/assignment/summary");
+  return data.waiting;
 }
 
-/** The same round robin the API will run: lead i goes to people[(cursor + i) % people.length]. */
-export function planShares(count: number, people: string[], start: number): Record<string, number> {
-  const shares: Record<string, number> = Object.fromEntries(people.map((p) => [p, 0]));
-  if (people.length === 0) return shares;
-  for (let i = 0; i < count; i++) shares[people[(start + i) % people.length]!]! += 1;
-  return shares;
+export async function getLoads(): Promise<LoadsData> {
+  const { data } = await api.get<LoadsData>("/assignment/loads");
+  return data;
 }
 
-export function currentCursor(): number {
-  return cursor;
+export async function distribute(input: { leadIds: string[]; toUserIds: string[] }): Promise<DistributeResult> {
+  const { data } = await api.post<DistributeResult>("/assignment/distribute", input);
+  return data;
 }
 
-export interface AssignInput {
-  leadIds: string[];
-  /** BDAs to share the leads between, in the order they appear in the panel. */
-  bdas: string[];
-  by: string;
-}
-
-export async function assignLeads(input: AssignInput): Promise<{ assigned: number }> {
-  await wait(450);
-  if (input.bdas.length === 0) throw new Error("Pick at least one BDA.");
-  const byId = new Map(MOCK_LEADS.map((l) => [l.id, l]));
-  // Booked calls first, as the queue promises.
-  const leads = input.leadIds
-    .map((id) => byId.get(id))
-    .filter((l): l is MockLead => l !== undefined && l.owner === null)
-    .sort((a, b) => Number(b.next.kind === "booked") - Number(a.next.kind === "booked"));
-  leads.forEach((lead, i) => {
-    lead.owner = input.bdas[(cursor + i) % input.bdas.length]!;
-    if (lead.next.kind === "none") lead.next = { text: "Call within 1 hour", kind: "task" };
-  });
-  cursor = (cursor + leads.length) % input.bdas.length;
-  history.unshift({ id: `h-${Date.now()}`, at: new Date().toISOString(), by: input.by, count: leads.length, bdas: input.bdas });
-  return { assigned: leads.length };
+/** `until` is the last day away (YYYY-MM-DD); null brings the person back. */
+export async function setLeave(input: { userId: string; until: string | null }): Promise<void> {
+  await api.post("/assignment/leave", input);
 }
 
 export async function getHistory(): Promise<HistoryEntry[]> {
-  await wait(150);
-  return [...history];
+  const { data } = await api.get<{ history: HistoryEntry[] }>("/assignment/history");
+  return data.history;
+}
+
+/**
+ * The same round robin the API runs: lead i goes to people[(start + i) % people.length], where the first
+ * person is whoever comes after the last person to get a lead.
+ */
+export function planShares(count: number, people: string[], cursorUserId: string | null): { shares: Record<string, number>; lastId: string | null } {
+  const shares: Record<string, number> = Object.fromEntries(people.map((p) => [p, 0]));
+  if (people.length === 0 || count === 0) return { shares, lastId: null };
+  const after = cursorUserId ? people.indexOf(cursorUserId) : -1;
+  const start = after === -1 ? 0 : (after + 1) % people.length;
+  for (let i = 0; i < count; i++) shares[people[(start + i) % people.length]!]! += 1;
+  return { shares, lastId: people[(start + count - 1) % people.length]! };
 }

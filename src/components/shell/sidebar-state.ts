@@ -1,56 +1,45 @@
 "use client";
 
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, type FocusEvent, type PointerEvent } from "react";
 
-const KEY = "crm.sidebar";
-const listeners = new Set<() => void>();
-// Held in memory too, so the choice still works for this visit when storage is blocked.
-let memory: boolean | null = null;
+/** A short pause before opening, so a mouse passing over the rail on its way somewhere else does not open it. */
+const OPEN_DELAY = 120;
+/** A short pause before closing, so slipping a few pixels past the edge does not snap it shut. */
+const CLOSE_DELAY = 200;
 
-function read(): boolean {
-  if (memory !== null) return memory;
-  try {
-    // Collapsed unless this person has chosen to expand it.
-    memory = window.localStorage.getItem(KEY) !== "expanded";
-  } catch {
-    memory = true;
-  }
-  return memory;
-}
+/**
+ * The desktop sidebar opens while the mouse is over it and closes when the mouse leaves. Keyboard users get the same:
+ * tabbing into it opens it, tabbing out or pressing Escape closes it. Touch never opens it, so a tap just navigates.
+ */
+export function useSidebarHover() {
+  const [open, setOpen] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-function write(value: boolean) {
-  memory = value;
-  try {
-    window.localStorage.setItem(KEY, value ? "collapsed" : "expanded");
-  } catch {
-    // Private window or blocked storage: the sidebar still toggles, it just will not be remembered.
-  }
-  listeners.forEach((l) => l());
-}
+  const schedule = useCallback((value: boolean, delay: number) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setOpen(value), delay);
+  }, []);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
 
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-/** Whether the desktop sidebar is collapsed to icons. Collapsed by default; the choice is remembered per browser. */
-export function useSidebar() {
-  const collapsed = useSyncExternalStore(subscribe, read, () => true);
-  const toggle = useCallback(() => write(!read()), []);
-  return { collapsed, toggle };
-}
-
-/** Press [ to collapse or expand the sidebar, unless the person is typing. */
-export function useSidebarShortcut(toggle: () => void) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "[" || event.metaKey || event.ctrlKey || event.altKey) return;
-      const el = event.target as HTMLElement | null;
-      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
-      event.preventDefault();
-      toggle();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [toggle]);
+  const handlers = {
+    onPointerEnter: (event: PointerEvent) => {
+      if (event.pointerType === "mouse") schedule(true, OPEN_DELAY);
+    },
+    onPointerLeave: (event: PointerEvent) => {
+      if (event.pointerType === "mouse") schedule(false, CLOSE_DELAY);
+    },
+    onFocus: (event: FocusEvent) => {
+      // Only keyboard focus opens it; a mouse click already opened it by hovering.
+      if ((event.target as HTMLElement).matches(":focus-visible")) schedule(true, 0);
+    },
+    onBlur: (event: FocusEvent) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) schedule(false, 0);
+    },
+    onKeyDown: (event: { key: string }) => {
+      if (event.key === "Escape") schedule(false, 0);
+    },
+  };
+  return { open, handlers };
 }
