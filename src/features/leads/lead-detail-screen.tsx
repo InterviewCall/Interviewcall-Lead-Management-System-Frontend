@@ -210,7 +210,7 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
-        <m.aside initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0, transition: { ...fast, delay: 0.05 } }} className={cn("thin-scroll lg:w-[320px] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain xl:w-[340px]", tab === "details" ? "block" : "hidden lg:block")}>
+        <m.aside initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0, transition: { ...fast, delay: 0.05 } }} className={cn("thin-scroll lg:w-[320px] lg:shrink-0 lg:overflow-x-hidden lg:overflow-y-auto lg:overscroll-contain xl:w-[340px]", tab === "details" ? "block" : "hidden lg:block")}>
           <AboutPanel lead={lead} vsl={vsl} onEdit={editable ? () => setEditOpen(true) : undefined} onEditCustom={editable ? () => setCustomOpen(true) : undefined} onChangeOwner={canDistribute(role) ? () => setOwnerOpen(true) : undefined} onMerge={canDistribute(role) ? () => setMergeOpen(true) : undefined} onDoNotContact={editable && (!lead.doNotContact || canDistribute(role)) ? () => setDncOpen(true) : undefined} onErase={role === "ADMIN" ? () => setEraseOpen(true) : undefined} />
         </m.aside>
 

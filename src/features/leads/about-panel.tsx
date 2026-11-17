@@ -21,12 +21,12 @@ function Section({ title, children, defaultOpen = true, action }: { title: strin
   const [open, setOpen] = useState(defaultOpen);
   return (
     <section className="border-b border-border last:border-b-0">
-      <div className="flex items-center pr-3">
-        <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex flex-1 items-center gap-2 px-4 py-3 text-left">
+      <div className="flex flex-wrap items-center pr-3">
+        <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex min-w-[7rem] flex-1 items-center gap-2 px-4 py-3 text-left">
           <Icon name="chev" size={14} className={cn("text-muted transition-transform", !open && "-rotate-90")} />
           <span className="text-small font-semibold text-text-2">{title}</span>
         </button>
-        {action}
+        {action ? <div className="ml-auto flex max-w-full min-w-0 justify-end pb-1 pl-4 sm:pb-0">{action}</div> : null}
       </div>
       <AnimatePresence initial={false}>
         {open ? (
@@ -54,7 +54,7 @@ function Row({ label, children, copy, empty }: { label: string; children?: React
 
 function SectionAction({ label, icon, onClick, ariaLabel }: { label: string; icon: "edit" | "swap" | "link" | "check" | "x" | "userX"; onClick: () => void; ariaLabel: string }) {
   return (
-    <button type="button" onClick={onClick} aria-label={ariaLabel} className="flex h-7 items-center gap-1 rounded-md px-2 text-small font-medium text-primary transition hover:bg-primary-soft">
+    <button type="button" onClick={onClick} aria-label={ariaLabel} className="flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-small font-medium whitespace-nowrap text-primary transition hover:bg-primary-soft">
       <Icon name={icon} size={13} /> {label}
     </button>
   );
@@ -77,7 +77,7 @@ export function AboutPanel({ lead, vsl, onEdit, onEditCustom, onChangeOwner, onM
       <Section
         title="Contact"
         action={
-          <span className="flex items-center">
+          <span className="flex flex-wrap items-center justify-end">
             {onMerge ? <SectionAction label="Duplicates" icon="link" onClick={onMerge} ariaLabel="Find and merge duplicates" /> : null}
             {onDoNotContact ? <SectionAction label={lead.doNotContact ? "Allow contact" : "Do not contact"} icon={lead.doNotContact ? "check" : "x"} onClick={onDoNotContact} ariaLabel={lead.doNotContact ? "Allow contact again" : "Mark do not contact"} /> : null}
             {onErase ? <SectionAction label="Erase" icon="userX" onClick={onErase} ariaLabel="Erase this person's details" /> : null}
