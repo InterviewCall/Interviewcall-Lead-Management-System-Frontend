@@ -2,7 +2,7 @@
 
 import { AnimatePresence, m } from "motion/react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Avatar } from "@/components/ui/avatar";
@@ -26,6 +26,7 @@ import { filtersOf, sameFilters, SaveViewModal, useDeleteView, useSavedViews } f
 import { NewLeadModal } from "./lead-form-modal";
 import { formatPhone, LIFECYCLE, LifecycleText, NextStepText, ScoreChip, STAGE, STAGE_ORDER, StageMeter, TempChip } from "./lead-display";
 import { BulkStageModal, BulkTaskModal } from "./bulk-actions";
+import { rememberListUrl } from "./list-url";
 import { canMark, canOnboard, CONTACT_STAGES } from "./marking";
 import type { LeadQuery, LeadView, LifecycleCode, SavedView, StageCode, TemperatureCode } from "./types";
 
@@ -36,6 +37,15 @@ const TEMPS: TemperatureCode[] = ["HOT", "WARM", "COLD"];
 function stageFromParam(value: string | null): StageCode | "" {
   if (!value) return "";
   return STAGE_ORDER.find((c) => c === value || STAGE[c].label === value) ?? "";
+}
+
+function viewFromParam(value: string | null): LeadView {
+  return VIEWS.find((v) => v.value === value)?.value ?? "all";
+}
+
+function numberFromParam(value: string | null): number | null {
+  const n = value === null ? NaN : Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
 }
 
 /** A day as YYYY-MM-DD in India time, `back` days before today. */
@@ -64,21 +74,22 @@ export function LeadsScreen() {
   const toast = useToast();
   const router = useRouter();
   const params = useSearchParams();
-  const [view, setView] = useState<LeadView>("all");
+  const pathname = usePathname();
+  const [view, setView] = useState<LeadView>(() => viewFromParam(params.get("view")));
   const [searchInput, setSearchInput] = useState(params.get("q") ?? "");
   const [search, setSearch] = useState(params.get("q") ?? "");
-  const [sourceId, setSourceId] = useState<number | null>(null);
+  const [sourceId, setSourceId] = useState<number | null>(() => numberFromParam(params.get("source")));
   const [stage, setStage] = useState<StageCode | "">(() => stageFromParam(params.get("stage")));
   const [lifecycle, setLifecycle] = useState<LifecycleCode | "">(() => CONTACT_STAGES.find((s) => s.code === params.get("contact"))?.code ?? "");
-  const [ownerId, setOwnerId] = useState("");
+  const [ownerId, setOwnerId] = useState(params.get("owner") ?? "");
   const [listId, setListId] = useState(params.get("list") ?? "");
-  const [temperature, setTemperature] = useState<TemperatureCode | "">("");
+  const [temperature, setTemperature] = useState<TemperatureCode | "">(() => TEMPS.find((t) => t === params.get("temp")) ?? "");
   const [from, setFrom] = useState(params.get("from") ?? "");
   const [to, setTo] = useState(params.get("to") ?? "");
   const [moreOpen, setMoreOpen] = useState(Boolean(params.get("from") || params.get("to")));
   const [saveOpen, setSaveOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => numberFromParam(params.get("page")) ?? 1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState<"assign" | "stage" | "task" | null>(null);
   const filters = useLeadFilters();
@@ -86,17 +97,46 @@ export function LeadsScreen() {
   const newOpen = params.get("new") === "1";
 
   useEffect(() => {
+    if (searchInput === search) return;
     const timer = setTimeout(() => {
       setSearch(searchInput);
       setPage(1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchInput, search]);
 
   const query = useMemo<LeadQuery>(
     () => ({ view, search, sourceId, stage, lifecycle, ownerId, listId, temperature, from, to, page, pageSize: PAGE_SIZE }),
     [view, search, sourceId, stage, lifecycle, ownerId, listId, temperature, from, to, page],
   );
+  // The tab, filters and page live in the address, so going into a lead and coming back (or reloading) lands on the same list.
+  const listUrl = useMemo(() => {
+    const out = new URLSearchParams();
+    if (view !== "all") out.set("view", view);
+    if (search) out.set("q", search);
+    if (sourceId !== null) out.set("source", String(sourceId));
+    if (stage) out.set("stage", stage);
+    if (lifecycle) out.set("contact", lifecycle);
+    if (ownerId) out.set("owner", ownerId);
+    if (listId) out.set("list", listId);
+    if (temperature) out.set("temp", temperature);
+    if (from) out.set("from", from);
+    if (to) out.set("to", to);
+    if (page > 1) out.set("page", String(page));
+    const text = out.toString();
+    return text ? `${pathname}?${text}` : pathname;
+  }, [pathname, view, search, sourceId, stage, lifecycle, ownerId, listId, temperature, from, to, page]);
+  const paramsText = params.toString();
+  useEffect(() => {
+    rememberListUrl(listUrl);
+    const shown = new URLSearchParams(paramsText);
+    shown.delete("new");
+    const want = new URL(listUrl, "http://x").searchParams;
+    if (shown.toString() !== want.toString()) {
+      const keepNew = new URLSearchParams(paramsText).get("new") === "1";
+      router.replace(keepNew ? `${listUrl}${listUrl.includes("?") ? "&" : "?"}new=1` : listUrl, { scroll: false });
+    }
+  }, [listUrl, paramsText, router]);
   const savedViews = useSavedViews();
   const deleteView = useDeleteView();
   const current = useMemo(() => filtersOf(query), [query]);
@@ -279,7 +319,7 @@ export function LeadsScreen() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1, transition: fast }}
               exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.1 } }}
-              onClick={() => { setSourceId(null); setStage(""); setLifecycle(""); setOwnerId(""); setListId(""); setTemperature(""); setSearchInput(""); setSearch(""); setFrom(""); setTo(""); resetPage(); router.replace("/leads"); }}
+              onClick={() => { setSourceId(null); setStage(""); setLifecycle(""); setOwnerId(""); setListId(""); setTemperature(""); setSearchInput(""); setSearch(""); setFrom(""); setTo(""); resetPage(); }}
               className="flex h-9 items-center gap-1.5 rounded-lg px-3 text-body font-medium text-text-2 hover:bg-black/5"
             >
               <Icon name="x" size={14} /> Clear filters
@@ -447,7 +487,7 @@ export function LeadsScreen() {
       {bulkOpen === "assign" ? <AssignLeadsModal leadIds={[...selected]} onClose={() => setBulkOpen(null)} onDone={finishBulk} /> : null}
       {bulkOpen === "stage" && user ? <BulkStageModal leadIds={[...selected]} role={user.role} onClose={() => setBulkOpen(null)} onDone={finishBulk} /> : null}
       {bulkOpen === "task" ? <BulkTaskModal leadIds={[...selected]} onClose={() => setBulkOpen(null)} onDone={finishBulk} /> : null}
-      <NewLeadModal open={newOpen} onClose={() => router.replace("/leads")} />
+      <NewLeadModal open={newOpen} onClose={() => router.replace(listUrl, { scroll: false })} />
     </>
   );
 }

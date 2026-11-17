@@ -19,6 +19,7 @@ import { cn } from "@/lib/cn";
 import { fast } from "@/lib/motion";
 import { canDistribute } from "@/features/assignment/handover";
 import { AboutPanel } from "./about-panel";
+import { useListHref } from "./list-url";
 import { CustomValuesModal } from "./custom-values-modal";
 import { AnonymiseModal } from "./anonymise-modal";
 import { DoNotContactModal } from "./dnc-modal";
@@ -46,6 +47,7 @@ type Tab = "timeline" | "details" | "score";
 export function LeadDetailScreen({ id }: { id: string }) {
   const q = useLeadDetail(id);
   const router = useRouter();
+  const listHref = useListHref();
   const mergedInto = q.error instanceof ApiError && q.error.code === "LEAD_MERGED" ? (q.error.existing?.id as string | undefined) : undefined;
   useEffect(() => {
     if (mergedInto) router.replace(`/leads/${mergedInto}`);
@@ -57,7 +59,7 @@ export function LeadDetailScreen({ id }: { id: string }) {
       <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface px-6 py-16 text-center shadow-card">
         <h1 className="text-h2 font-semibold text-text">Lead not found</h1>
         <p className="max-w-sm text-body text-text-2">It may have been removed, or it is not one of the leads you can open.</p>
-        <Link href="/leads" className="text-body font-medium text-primary hover:underline">Back to leads</Link>
+        <Link href={listHref} className="text-body font-medium text-primary hover:underline">Back to leads</Link>
       </div>
     ) : (
       <Alert>{errorMessage(q.error)}</Alert>
@@ -68,6 +70,7 @@ export function LeadDetailScreen({ id }: { id: string }) {
 
 function Workspace({ id, data }: { id: string; data: LeadDetail }) {
   const { user } = useAuth();
+  const listHref = useListHref();
   const toast = useToast();
   const mark = useMarkLead(id);
   const [tab, setTab] = useState<Tab>("timeline");
@@ -118,7 +121,7 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
       {/* ---- the header stays put; only the panes below it scroll ---- */}
       <m.header initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0, transition: fast }} className="shrink-0 rounded-card border border-border bg-surface shadow-card">
         <div className="flex flex-wrap items-start gap-x-4 gap-y-3 px-4 pt-4 sm:px-5">
-          <Link href="/leads" aria-label="Back to leads" className="mt-1 hidden size-8 shrink-0 items-center justify-center rounded-lg border border-border text-text-2 transition hover:bg-surface-alt lg:flex">
+          <Link href={listHref} aria-label="Back to leads" className="mt-1 hidden size-8 shrink-0 items-center justify-center rounded-lg border border-border text-text-2 transition hover:bg-surface-alt lg:flex">
             <Icon name="back" size={16} />
           </Link>
           <span className={cn("rounded-full p-[3px] ring-2", lead.temperature === "HOT" ? "ring-hot" : lead.temperature === "WARM" ? "ring-warm" : lead.temperature === "COLD" ? "ring-cold" : "ring-border")} title={lead.temperature ? `${lead.temperature.toLowerCase()} lead` : "Not rated yet"}>
