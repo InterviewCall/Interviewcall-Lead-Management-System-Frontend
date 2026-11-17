@@ -17,7 +17,7 @@ export function Segmented<T extends string>({
 }: { options: SegmentOption<T>[]; value: T; onChange: (value: T) => void; ariaLabel: string }) {
   const pillId = useId();
   return (
-    <div role="tablist" aria-label={ariaLabel} className="flex shrink-0 items-center gap-0.5 rounded-lg bg-bg p-[3px]">
+    <div role="tablist" aria-label={ariaLabel} className="flex max-w-full shrink-0 items-center gap-0.5 overflow-x-auto rounded-lg bg-bg p-[3px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {options.map((o) => {
         const active = o.value === value;
         return (
