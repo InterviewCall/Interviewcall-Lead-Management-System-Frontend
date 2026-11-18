@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
 import { Suspense, type ReactNode } from "react";
 import { RoleGate } from "@/components/shell/access-denied";
 import { AppShell } from "@/components/shell/app-shell";
 import { RequireAuth, Splash } from "@/features/auth/guards";
+
+// The screens behind sign-in hold lead data: keep them out of search engines whatever links to them.
+export const metadata: Metadata = { robots: { index: false, follow: false, nocache: true } };
 
 // Every screen sits behind the client-side sign-in check, so none can render before the session is known.
 // Opt out of instant-navigation validation (Next 16 dev "Insights"); it cannot apply here.
