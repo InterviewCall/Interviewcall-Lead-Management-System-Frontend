@@ -8,7 +8,6 @@ import { Alert } from "@/components/ui/alert";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Select } from "@/components/ui/field";
 import { Icon } from "@/components/ui/icon";
 import { PageHeader } from "@/components/ui/page-header";
@@ -17,6 +16,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
 import { canCloseWon, canMark } from "@/features/leads/marking";
+import { StageDateModal } from "@/features/leads/stage-date-modal";
+import { formatDay, formatDayShort, isScheduledStage } from "@/features/leads/stage-date";
 import { HeatBars, STAGE, StageChip, TempChip, TEMPERATURE } from "@/features/leads/lead-display";
 import type { StageCode, TemperatureCode } from "@/features/leads/types";
 import { errorMessage } from "@/lib/api/errors";
@@ -47,6 +48,8 @@ export function PipelineScreen() {
   const [ownerId, setOwnerId] = useState("");
   const [mobileStage, setMobileStage] = useState<StageCode>("CALL_1_PENDING");
   const [winTarget, setWinTarget] = useState<{ id: string; name: string } | null>(null);
+  // A card dropped on Test or Psychometric session waits here for the day it is scheduled for.
+  const [dateTarget, setDateTarget] = useState<{ id: string; name: string; stage: "TEST" | "PSYCHOMETRIC_SESSION" } | null>(null);
   const toast = useToast();
   const move = useMoveCard();
   const [dragId, setDragId] = useState<string | null>(null);
@@ -56,12 +59,15 @@ export function PipelineScreen() {
   const data = pipeline.data;
   const activeFilters = Number(Boolean(temperature)) + Number(Boolean(ownerId));
 
-  function moveCard(id: string, name: string, stage: StageCode) {
+  function moveCard(id: string, name: string, stage: StageCode, date?: string, done?: () => void) {
     move.mutate(
-      { id, stage },
+      { id, stage, date },
       {
-        onSuccess: () => toast.show(stage === "CLOSED_WON" ? `${name} is now Enrolled.` : `${name} moved to ${STAGE[stage].label}.`),
-        onError: (e) => toast.show(errorMessage(e), "error"),
+        onSuccess: () => {
+          done?.();
+          toast.show(stage === "CLOSED_WON" ? `${name} is now Enrolled.` : `${name} moved to ${STAGE[stage].label}${date ? ` for ${formatDay(date)}` : ""}.`);
+        },
+        onError: (e) => { if (!done) toast.show(errorMessage(e), "error"); },
       },
     );
   }
@@ -74,6 +80,7 @@ export function PipelineScreen() {
     const card = from?.cards.find((c) => c.id === id);
     if (!id || !card || !from || from.stage === stage) return;
     if (stage === "CLOSED_WON") return setWinTarget({ id, name: card.name });
+    if (isScheduledStage(stage)) return setDateTarget({ id, name: card.name, stage });
     moveCard(id, card.name, stage);
   }
 
@@ -212,7 +219,7 @@ export function PipelineScreen() {
                   </p>
                 ) : (
                   <ul className="flex flex-col gap-2.5">
-                    {mobileColumn.cards.map((card) => <li key={card.id}><OppCard card={card} /></li>)}
+                    {mobileColumn.cards.map((card) => <li key={card.id}><OppCard card={card} stage={mobileColumn.stage} /></li>)}
                   </ul>
                 )}
                 <MoreLink column={mobileColumn} shown={mobileColumn.cards.length} />
@@ -224,21 +231,30 @@ export function PipelineScreen() {
         <ListView columns={data.columns} open={data.open} />
       )}
 
-      <ConfirmDialog
-        open={winTarget !== null}
-        title="Close as won?"
-        confirmLabel="Close as won"
-        loading={move.isPending}
-        onCancel={() => setWinTarget(null)}
-        onConfirm={() => {
-          if (!winTarget) return;
-          const target = winTarget;
-          setWinTarget(null);
-          moveCard(target.id, target.name, "CLOSED_WON");
-        }}
-      >
-        Close {winTarget?.name ?? "this lead"} as won only after payment or financing is complete. The opportunity closes as won, the contact stage becomes Enrolled, and all pre-sales communication stops. Only a manager can move an enrolled lead back.
-      </ConfirmDialog>
+      {winTarget ? (
+        <StageDateModal
+          open
+          stage="CLOSED_WON"
+          leadName={winTarget.name}
+          pending={move.isPending}
+          error={move.isError ? errorMessage(move.error) : undefined}
+          onClose={() => { setWinTarget(null); move.reset(); }}
+          onSubmit={(date) => moveCard(winTarget.id, winTarget.name, "CLOSED_WON", date, () => setWinTarget(null))}
+        >
+          Close as won only after payment or financing is complete. The opportunity closes as won, the contact stage becomes Enrolled, and all pre-sales communication stops. Only a manager can move an enrolled lead back.
+        </StageDateModal>
+      ) : null}
+      {dateTarget ? (
+        <StageDateModal
+          open
+          stage={dateTarget.stage}
+          leadName={dateTarget.name}
+          pending={move.isPending}
+          error={move.isError ? errorMessage(move.error) : undefined}
+          onClose={() => { setDateTarget(null); move.reset(); }}
+          onSubmit={(date) => moveCard(dateTarget.id, dateTarget.name, dateTarget.stage, date, () => setDateTarget(null))}
+        />
+      ) : null}
     </>
   );
 }
@@ -329,7 +345,7 @@ function BoardColumnView({ column, index, canDrag, accepts, dragging, isOver, dr
     >
       <span aria-hidden className="absolute inset-x-0 top-0 h-[3px]" style={{ backgroundColor: STAGE_COLOR[column.stage] }} />
       <header className="flex items-baseline gap-2 px-1 pb-0.5">
-        <h2 title={STAGE[column.stage].label} className="min-w-0 flex-1 truncate text-body font-semibold text-text">{STAGE[column.stage].label}</h2>
+        <h2 className="min-w-0 flex-1 truncate text-body font-semibold text-text">{STAGE[column.stage].label}</h2>
         <span className="nums font-display text-[15px] leading-5 font-bold text-text-2">{column.count.toLocaleString("en-IN")}</span>
       </header>
       {shown.length === 0 ? (
@@ -338,7 +354,7 @@ function BoardColumnView({ column, index, canDrag, accepts, dragging, isOver, dr
         </p>
       ) : (
         shown.map((card) => (
-          <OppCard key={card.id} card={card} board draggable={canDrag && !won} dimmed={draggingId === card.id} onDragStart={onDragStart} onDragEnd={onDragEnd} />
+          <OppCard key={card.id} card={card} stage={column.stage} board draggable={canDrag && !won} dimmed={draggingId === card.id} onDragStart={onDragStart} onDragEnd={onDragEnd} />
         ))
       )}
       <MoreLink column={column} shown={shown.length} />
@@ -348,6 +364,8 @@ function BoardColumnView({ column, index, canDrag, accepts, dragging, isOver, dr
 
 interface OppCardProps {
   card: BoardCard;
+  /** The stage whose column the card is in. */
+  stage: StageCode;
   /** Board cards glide to their new column. Phone cards stay plain. */
   board?: boolean;
   draggable?: boolean;
@@ -361,8 +379,9 @@ function subtitle(card: BoardCard): string {
   return parts.length > 0 ? parts.join(" · ") : card.source;
 }
 
-function OppCard({ card, board = false, draggable = false, dimmed = false, onDragStart, onDragEnd }: OppCardProps) {
+function OppCard({ card, stage, board = false, draggable = false, dimmed = false, onDragStart, onDragEnd }: OppCardProps) {
   const unassigned = card.owner === null;
+  const stageOn = card.stageOn ?? null;
   const link = (
     <Link
       href={`/leads/${card.id}`}
@@ -388,6 +407,7 @@ function OppCard({ card, board = false, draggable = false, dimmed = false, onDra
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-body font-semibold text-text">{card.name}</span>
           <span className="truncate text-small text-text-2">{subtitle(card)}</span>
+          {stageOn ? <span className="mt-0.5 truncate text-small font-medium text-info">{stageLabel(stage)} {formatDayShort(stageOn)}</span> : null}
         </span>
         {card.temperature ? (
           <span title={`${TEMPERATURE[card.temperature].label} lead`} className="mt-1"><HeatBars code={card.temperature} /></span>
@@ -427,6 +447,9 @@ function CardNext({ next, compact = false }: { next: BoardCard["next"]; compact?
   );
 }
 
+/** "Test on", "Session on", "Won": what the day on a card means. */
+const stageLabel = (stage: StageCode) => (stage === "TEST" ? "Test" : stage === "PSYCHOMETRIC_SESSION" ? "Session" : stage === "CLOSED_WON" ? "Won" : "");
+
 function ListView({ columns, open }: { columns: BoardColumn[]; open: number }) {
   const rows = columns.filter((c) => c.stage !== "CLOSED_WON").flatMap((c) => c.cards.map((card) => ({ card, stage: c.stage })));
   return (
@@ -452,7 +475,12 @@ function ListView({ columns, open }: { columns: BoardColumn[]; open: number }) {
                   </Link>
                 </td>
                 <td className="max-w-[320px] truncate px-4 text-body text-text-2" title={subtitle(card) || undefined}>{subtitle(card)}</td>
-                <td className="px-4"><StageChip code={stage} /></td>
+                <td className="px-4">
+                  <span className="flex flex-col items-start gap-0.5">
+                    <StageChip code={stage} />
+                    {card.stageOn ? <span className="text-small text-text-2">{stageLabel(stage)} {formatDayShort(card.stageOn)}</span> : null}
+                  </span>
+                </td>
                 <td className="px-4 whitespace-nowrap"><TempChip code={card.temperature} /></td>
                 <td className="px-4">
                   {card.owner ? (

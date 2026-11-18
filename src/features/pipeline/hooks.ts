@@ -10,11 +10,11 @@ import type { PipelineData } from "./types";
 export function useMoveCard() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, stage }: { id: string; stage: StageCode }) => moveOpportunity(id, stage),
-    onMutate: async ({ id, stage }) => {
+    mutationFn: ({ id, stage, date }: { id: string; stage: StageCode; date?: string }) => moveOpportunity(id, stage, date),
+    onMutate: async ({ id, stage, date }) => {
       await queryClient.cancelQueries({ queryKey: pipelineKeys.board });
       const snapshots = queryClient.getQueriesData<PipelineData>({ queryKey: pipelineKeys.board });
-      queryClient.setQueriesData<PipelineData>({ queryKey: pipelineKeys.board }, (old) => (old ? applyMove(old, id, stage) : old));
+      queryClient.setQueriesData<PipelineData>({ queryKey: pipelineKeys.board }, (old) => (old ? applyMove(old, id, stage, date ?? null) : old));
       return { snapshots };
     },
     onError: (_error, _vars, context) => {

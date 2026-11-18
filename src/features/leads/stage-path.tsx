@@ -6,6 +6,7 @@ import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/cn";
 import { spring } from "@/lib/motion";
 import { STAGE, STAGE_ORDER } from "./lead-display";
+import { formatDayShort, isScheduledStage, savedDay } from "./stage-date";
 import type { LeadDetail, StageCode } from "./types";
 
 const CHEVRON = "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%)";
@@ -51,7 +52,10 @@ export function StagePath({
       {STAGE_ORDER.map((code, i) => {
         const done = won ? true : i < current;
         const isCurrent = i === current;
-        const clickable = open && canMove && !isCurrent && !busy && (code !== "CLOSED_WON" || canWin);
+        // A step with a day (the test, the psychometric session) can be clicked again to change its day.
+        const reschedulable = isCurrent && isScheduledStage(code);
+        const clickable = open && canMove && !busy && (reschedulable || (!isCurrent && (code !== "CLOSED_WON" || canWin)));
+        const day = (isCurrent || done) && (code === "TEST" || code === "PSYCHOMETRIC_SESSION" || code === "CLOSED_WON") ? savedDay(opportunity, code) : null;
         const shape = i === 0 ? FIRST : i === STAGE_ORDER.length - 1 ? LAST : CHEVRON;
         const wonStep = won && isCurrent;
         const lostStep = lost && isCurrent;
@@ -59,7 +63,7 @@ export function StagePath({
         return (
           <li key={code} className={cn("min-w-[116px] flex-1 snap-center", i > 0 && "-ml-2.5")} aria-current={isCurrent ? "step" : undefined}>
             <Tag
-              {...(clickable ? { type: "button" as const, onClick: () => onMove(code), title: `Move to ${STAGE[code].label}` } : {})}
+              {...(clickable ? { type: "button" as const, onClick: () => onMove(code), title: reschedulable ? `Change the ${STAGE[code].label.toLowerCase()} date` : `Move to ${STAGE[code].label}` } : {})}
               style={{ clipPath: shape }}
               className={cn(
                 "relative flex h-11 w-full items-center justify-center gap-1.5 px-5 text-center text-small leading-tight transition-colors",
@@ -86,8 +90,10 @@ export function StagePath({
             </Tag>
             {isCurrent ? (
               <m.p key={opportunity.stageChangedAt} initial={{ opacity: 0, y: -3 }} animate={{ opacity: 1, y: 0 }} className="mt-1 px-2 text-center text-[11px] text-muted">
-                {won ? "Won" : lost ? "Lost here" : `Day ${dayInStage(opportunity.stageChangedAt)} in this stage`}
+                {won ? (day ? `Won ${formatDayShort(day)}` : "Won") : lost ? "Lost here" : day ? `${formatDayShort(day)} · Day ${dayInStage(opportunity.stageChangedAt)}` : `Day ${dayInStage(opportunity.stageChangedAt)} in this stage`}
               </m.p>
+            ) : day ? (
+              <p className="mt-1 px-2 text-center text-[11px] text-muted">{formatDayShort(day)}</p>
             ) : (
               <p className="mt-1 h-[16.5px]" aria-hidden />
             )}

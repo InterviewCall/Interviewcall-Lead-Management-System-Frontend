@@ -95,8 +95,9 @@ export async function anonymiseLead(id: string, reason: string): Promise<{ id: s
   return data;
 }
 
-export async function moveOpportunity(id: string, stage: StageCode): Promise<LeadDetail> {
-  const { data } = await api.post<LeadDetail>(`/leads/${id}/opportunity/stage`, { stage });
+/** Moves the open opportunity. Test, Psychometric session and Closed Won each need `date` (the day it is scheduled, or the day it was won). */
+export async function moveOpportunity(id: string, stage: StageCode, date?: string): Promise<LeadDetail> {
+  const { data } = await api.post<LeadDetail>(`/leads/${id}/opportunity/stage`, date ? { stage, date } : { stage });
   return data;
 }
 
@@ -202,7 +203,7 @@ export async function changeOwner(id: string, toUserId: string): Promise<void> {
 export type PaymentInput = Omit<Enrolment, "updatedAt">;
 
 /** Closes the open opportunity as won, with the payment agreed. */
-export async function markWon(id: string, input: PaymentInput): Promise<LeadDetail> {
+export async function markWon(id: string, input: PaymentInput & { wonOn: string }): Promise<LeadDetail> {
   const { data } = await api.post<LeadDetail>(`/leads/${id}/opportunity/won`, input);
   return data;
 }

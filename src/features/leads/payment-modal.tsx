@@ -12,6 +12,7 @@ import { errorMessage, toApiError } from "@/lib/api/errors";
 import { formatRupees } from "@/lib/format";
 import { fast } from "@/lib/motion";
 import type { PaymentInput } from "./api";
+import { dayBounds, formatDay, STAGE_DATE_LABEL, todayIst } from "./stage-date";
 import { useMarkLead } from "./hooks";
 import type { Enrolment, PaymentMode } from "./types";
 
@@ -52,7 +53,9 @@ function PaymentForm({ leadId, leadName, mode, current, onClose }: { leadId: str
   const [collected, setCollected] = useState(current ? String(current.amountCollected) : "");
   const [paymentMode, setPaymentMode] = useState<PaymentMode | "">(current?.paymentMode ?? "");
   const [note, setNote] = useState(current?.note ?? "");
+  const [wonOn, setWonOn] = useState(todayIst());
   const [touched, setTouched] = useState(false);
+  const wonBounds = dayBounds("CLOSED_WON");
 
   const feeValue = parseRupees(fee);
   const collectedValue = collected.trim() === "" ? 0 : parseRupees(collected);
@@ -62,6 +65,7 @@ function PaymentForm({ leadId, leadName, mode, current, onClose }: { leadId: str
         amountCollected:
           collectedValue === null ? "Enter a whole number of rupees" : feeValue !== null && collectedValue > feeValue ? "More than the fee" : undefined,
         paymentMode: paymentMode === "" ? "Choose how they are paying" : undefined,
+        wonOn: mode !== "won" ? undefined : wonOn === "" ? "Choose the date it was won" : wonOn > wonBounds.max ? "The date it was won cannot be in the future" : wonOn < wonBounds.min ? "That date is too far back" : undefined,
       }
     : {};
   const server = save.isError ? toApiError(save.error).fields ?? {} : {};
@@ -71,6 +75,7 @@ function PaymentForm({ leadId, leadName, mode, current, onClose }: { leadId: str
     event.preventDefault();
     setTouched(true);
     if (feeValue === null || feeValue < 1 || collectedValue === null || collectedValue > feeValue || paymentMode === "") return;
+    if (mode === "won" && (wonOn === "" || wonOn > wonBounds.max || wonOn < wonBounds.min)) return;
     const input: PaymentInput = {
       program: program.trim() || null,
       feeAmount: feeValue,
@@ -78,12 +83,14 @@ function PaymentForm({ leadId, leadName, mode, current, onClose }: { leadId: str
       paymentMode,
       note: note.trim() || null,
     };
-    save.mutate(input, {
+    const done = {
       onSuccess: () => {
         toast.show(mode === "won" ? `${leadName} is now Enrolled` : "Payment saved", "success");
         onClose();
       },
-    });
+    };
+    if (mode === "won") mark.won.mutate({ ...input, wonOn }, done);
+    else mark.payment.mutate(input, done);
   }
 
   return (
@@ -123,6 +130,11 @@ function PaymentForm({ leadId, leadName, mode, current, onClose }: { leadId: str
             {(Object.keys(PAYMENT_MODE) as PaymentMode[]).map((k) => <option key={k} value={k}>{PAYMENT_MODE[k]}</option>)}
           </Select>
         )}</Field>
+        {mode === "won" ? (
+          <Field label={STAGE_DATE_LABEL.CLOSED_WON} hint={wonOn ? formatDay(wonOn) : "The day the deal was won"} error={errors.wonOn ?? server.wonOn ?? server.date}>{({ id, describedBy, invalid }) => (
+            <TextInput id={id} type="date" value={wonOn} min={wonBounds.min} max={wonBounds.max} onChange={(e) => setWonOn(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
+          )}</Field>
+        ) : null}
         <Field label="Note" hint="Optional: EMI plan, loan partner, due dates">{({ id, describedBy }) => (
           <TextInput id={id} value={note} maxLength={255} onChange={(e) => setNote(e.target.value)} aria-describedby={describedBy} />
         )}</Field>

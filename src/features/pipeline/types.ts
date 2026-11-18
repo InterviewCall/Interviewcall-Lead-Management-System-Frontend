@@ -12,6 +12,8 @@ export interface BoardCard {
   owner: { id: string; name: string } | null;
   next: Lead["next"];
   stageChangedAt: string;
+  /** The day the stage is about: when the test or session is scheduled, or when the deal was won. Null for the other stages. */
+  stageOn: string | null;
 }
 
 export interface BoardColumn {

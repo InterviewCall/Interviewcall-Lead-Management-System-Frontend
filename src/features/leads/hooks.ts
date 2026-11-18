@@ -73,11 +73,11 @@ export function useMarkLead(id: string) {
         for (const key of ["leads", "pipeline", "assignment", "my-day"]) void queryClient.invalidateQueries({ queryKey: [key] });
       },
     }),
-    moveStage: useMutation({ mutationFn: (stage: Parameters<typeof moveOpportunity>[1]) => moveOpportunity(id, stage), onSuccess }),
+    moveStage: useMutation({ mutationFn: (input: { stage: Parameters<typeof moveOpportunity>[1]; date?: string }) => moveOpportunity(id, input.stage, input.date), onSuccess }),
     lose: useMutation({ mutationFn: (input: Parameters<typeof loseOpportunity>[1]) => loseOpportunity(id, input), onSuccess }),
     reopen: useMutation({ mutationFn: () => reopenOpportunity(id), onSuccess }),
     edit: useMutation({ mutationFn: (input: LeadEdit) => editLead(id, input), onSuccess }),
-    won: useMutation({ mutationFn: (input: PaymentInput) => markWon(id, input), onSuccess }),
+    won: useMutation({ mutationFn: (input: PaymentInput & { wonOn: string }) => markWon(id, input), onSuccess }),
     payment: useMutation({ mutationFn: (input: PaymentInput) => savePayment(id, input), onSuccess }),
     merge: useMutation({ mutationFn: (duplicateId: string) => mergeLead(id, duplicateId), onSuccess }),
     owner: useMutation({

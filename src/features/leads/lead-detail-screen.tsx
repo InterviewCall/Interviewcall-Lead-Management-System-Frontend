@@ -38,6 +38,8 @@ import { CallSummary } from "./call-summary";
 import { canCloseWon, canMark } from "./marking";
 import { MarkLostModal } from "./mark-lost-modal";
 import { ScoreHistory } from "./score-history";
+import { StageDateModal } from "./stage-date-modal";
+import { formatDay, isDatedStage, isScheduledStage, savedDay } from "./stage-date";
 import { StagePath } from "./stage-path";
 import { TaskModal } from "./task-modal";
 import type { LeadDetail, LifecycleCode, StageCode } from "./types";
@@ -76,6 +78,7 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
   const [tab, setTab] = useState<Tab>("timeline");
   const [lostOpen, setLostOpen] = useState(false);
   const [winTarget, setWinTarget] = useState(false);
+  const [dateTarget, setDateTarget] = useState<"TEST" | "PSYCHOMETRIC_SESSION" | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -105,10 +108,30 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
 
   function moveTo(stage: StageCode) {
     if (stage === "CLOSED_WON") return setWinTarget(true);
+    // Test and Psychometric session need the day it is scheduled for (also when the lead is already there and the day changes).
+    if (isScheduledStage(stage)) return setDateTarget(stage);
     const from = opportunity?.stage;
-    mark.moveStage.mutate(stage, {
-      onSuccess: () => toast.show(`Moved to ${STAGE[stage].label}`, "success", from ? { label: "Undo", onClick: () => mark.moveStage.mutate(from, { onError: fail }) } : undefined),
+    mark.moveStage.mutate({ stage }, {
+      onSuccess: () => toast.show(`Moved to ${STAGE[stage].label}`, "success", from ? undoMove(from) : undefined),
       onError: fail,
+    });
+  }
+
+  // Going back to a stage that has a day is only offered as an undo when that day is still on file.
+  function undoMove(from: StageCode) {
+    const date = savedDay(opportunity, from);
+    if (isDatedStage(from) && !date) return undefined;
+    return { label: "Undo", onClick: () => mark.moveStage.mutate({ stage: from, ...(date ? { date } : {}) }, { onError: fail }) };
+  }
+
+  function saveDate(stage: "TEST" | "PSYCHOMETRIC_SESSION", date: string) {
+    const from = opportunity?.stage;
+    const rescheduled = from === stage;
+    mark.moveStage.mutate({ stage, date }, {
+      onSuccess: () => {
+        setDateTarget(null);
+        toast.show(rescheduled ? `${STAGE[stage].label} moved to ${formatDay(date)}` : `Moved to ${STAGE[stage].label} for ${formatDay(date)}`, "success", !rescheduled && from ? undoMove(from) : undefined);
+      },
     });
   }
 
@@ -269,6 +292,19 @@ function Workspace({ id, data }: { id: string; data: LeadDetail }) {
         onClose={() => { setLostOpen(false); mark.lose.reset(); }}
         onConfirm={(input) => mark.lose.mutate(input, { onSuccess: () => { setLostOpen(false); toast.show("Marked as lost"); } })}
       />
+      {dateTarget ? (
+        <StageDateModal
+          open
+          stage={dateTarget}
+          leadName={lead.name}
+          reschedule={opportunity?.stage === dateTarget}
+          initial={savedDay(opportunity, dateTarget)}
+          pending={mark.moveStage.isPending}
+          error={mark.moveStage.isError ? errorMessage(mark.moveStage.error) : undefined}
+          onSubmit={(date) => saveDate(dateTarget, date)}
+          onClose={() => { setDateTarget(null); mark.moveStage.reset(); }}
+        />
+      ) : null}
       <PaymentModal leadId={id} leadName={lead.name} mode="won" current={null} open={winTarget} onClose={() => setWinTarget(false)} />
       <PaymentModal leadId={id} leadName={lead.name} mode="update" current={opportunity?.enrolment ?? null} open={paymentOpen} onClose={() => setPaymentOpen(false)} />
       <MergeModal lead={lead} open={mergeOpen} onClose={() => setMergeOpen(false)} />

@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Field, Select } from "@/components/ui/field";
+import { Field, Select, TextInput } from "@/components/ui/field";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { Modal } from "@/components/ui/modal";
 import { Spinner } from "@/components/ui/spinner";
@@ -13,6 +13,7 @@ import { cn } from "@/lib/cn";
 import { DueField, dueToIso } from "./follow-up-fields";
 import { useEngagementActions, useOutcomes } from "./hooks";
 import { STAGE, STAGE_ORDER, TEMPERATURE } from "./lead-display";
+import { dayBounds, isScheduledStage, STAGE_DATE_LABEL } from "./stage-date";
 import type { ActivityKind, LeadDetail, LogActivityInput, StageCode, TemperatureCode } from "./types";
 
 const KINDS: Array<{ value: ActivityKind; label: string; icon: IconName }> = [
@@ -45,6 +46,7 @@ function LogForm({ detail, onClose }: { detail: LeadDetail; onClose: () => void 
   const [outcomeId, setOutcomeId] = useState<number | null>(null);
   const open = opportunity?.status === "OPEN" ? opportunity : null;
   const [stage, setStage] = useState<StageCode | "">(open && open.stage !== "CLOSED_WON" ? open.stage : "");
+  const [stageDay, setStageDay] = useState("");
   const [temperature, setTemperature] = useState<TemperatureCode | "">(lead.temperature ?? "");
   const [notes, setNotes] = useState("");
   const [action, setAction] = useState(ACTIONS[0]!);
@@ -56,6 +58,10 @@ function LogForm({ detail, onClose }: { detail: LeadDetail; onClose: () => void 
   const needsNextStep = kind === "CALL" && Boolean(outcome?.requiresFollowup);
   const outcomeError = touched && kind === "CALL" && outcomeId === null ? "Choose what happened on the call" : undefined;
   const dueError = touched && needsNextStep && asksNextStep && due === "" ? "Choose when to follow up" : undefined;
+  // Moving the lead to Test or Psychometric session asks for the day it is scheduled for.
+  const movesToScheduled = open !== null && stage !== "" && stage !== open.stage && isScheduledStage(stage);
+  const bounds = isScheduledStage(stage) ? dayBounds(stage) : null;
+  const stageDayError = touched && movesToScheduled && bounds ? (stageDay === "" ? `Choose ${stage === "TEST" ? "the test date" : "the date of the session"}` : stageDay < bounds.min || stageDay > bounds.max ? "Choose a date from the last 60 days to a year ahead" : undefined) : undefined;
   const notesError = touched && kind === "NOTE" && notes.trim() === "" ? "Write the note" : undefined;
 
   function onSubmit(event: FormEvent) {
@@ -64,11 +70,15 @@ function LogForm({ detail, onClose }: { detail: LeadDetail; onClose: () => void 
     if (kind === "CALL" && outcomeId === null) return;
     if (kind === "NOTE" && notes.trim() === "") return;
     if (needsNextStep && asksNextStep && due === "") return;
+    if (movesToScheduled && bounds && (stageDay === "" || stageDay < bounds.min || stageDay > bounds.max)) return;
 
     const input: LogActivityInput = { kind };
     if (kind === "CALL" && outcomeId !== null) input.outcomeId = outcomeId;
     if (notes.trim()) input.notes = notes.trim();
-    if (open && stage && stage !== open.stage) input.stage = stage;
+    if (open && stage && stage !== open.stage) {
+      input.stage = stage;
+      if (movesToScheduled) input.stageDate = stageDay;
+    }
     if (temperature && temperature !== lead.temperature) input.temperature = temperature;
     const dueAt = dueToIso(due);
     if (asksNextStep && dueAt) input.nextStep = { title: action, dueAt };
@@ -139,6 +149,11 @@ function LogForm({ detail, onClose }: { detail: LeadDetail; onClose: () => void 
               <Select id={id} value={stage} onChange={(e) => setStage(e.target.value as StageCode)}>
                 {MOVABLE.map((s) => <option key={s} value={s}>{STAGE[s].label}</option>)}
               </Select>
+            )}</Field>
+          ) : null}
+          {movesToScheduled && isScheduledStage(stage) ? (
+            <Field label={STAGE_DATE_LABEL[stage]} error={stageDayError}>{({ id, describedBy, invalid }) => (
+              <TextInput id={id} type="date" value={stageDay} min={bounds?.min} max={bounds?.max} onChange={(e) => setStageDay(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
             )}</Field>
           ) : null}
           <Field label="Temperature">{({ id }) => (

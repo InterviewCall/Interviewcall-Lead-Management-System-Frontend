@@ -96,6 +96,10 @@ export interface LeadDetail {
     openedAt: string;
     stageChangedAt: string;
     closedAt: string | null;
+    /** The day the test is scheduled for, the day of the psychometric session and the day it was won (YYYY-MM-DD). */
+    testOn: string | null;
+    psychometricOn: string | null;
+    wonOn: string | null;
     lostReason: string | null;
     lostNote: string | null;
     /** What was agreed and collected, once the deal is won. Null for a win with no payment recorded yet. */
@@ -173,6 +177,8 @@ export interface LogActivityInput {
   outcomeId?: number;
   notes?: string;
   stage?: StageCode;
+  /** The day for `stage` when it needs one: the test date or the psychometric session date. */
+  stageDate?: string;
   temperature?: TemperatureCode;
   nextStep?: { title: string; dueAt: string };
 }
