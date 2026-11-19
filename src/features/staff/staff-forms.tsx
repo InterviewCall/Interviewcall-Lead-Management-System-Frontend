@@ -7,6 +7,7 @@ import { Field, Select, TextInput } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { errorMessage, toApiError } from "@/lib/api/errors";
+import { PHONE_HINT, formatPhone, phoneProblem, samePhone } from "@/features/auth/phone";
 import { ROLES, ROLE_LABEL, type Role } from "@/lib/roles";
 import { useInviteStaff, useUpdateStaff } from "./hooks";
 import type { StaffMember } from "./types";
@@ -33,11 +34,13 @@ function InviteForm({ onClose }: { onClose: () => void }) {
   const invite = useInviteStaff();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [role, setRole] = useState<Role>("BDA");
   const [touched, setTouched] = useState(false);
 
   const nameError = touched && name.trim().length < 2 ? "Enter a name" : undefined;
   const emailError = touched && !EMAIL_PATTERN.test(email.trim()) ? "Enter a valid email" : undefined;
+  const phoneError = touched ? phoneProblem(phone) : undefined;
 
   const apiError = invite.error ? toApiError(invite.error) : null;
   const fieldErrors = apiError?.fields ?? {};
@@ -47,9 +50,9 @@ function InviteForm({ onClose }: { onClose: () => void }) {
   function onSubmit(event: FormEvent) {
     event.preventDefault();
     setTouched(true);
-    if (name.trim().length < 2 || !EMAIL_PATTERN.test(email.trim())) return;
+    if (name.trim().length < 2 || !EMAIL_PATTERN.test(email.trim()) || phoneProblem(phone)) return;
     invite.mutate(
-      { name: name.trim(), email: email.trim(), role },
+      { name: name.trim(), email: email.trim(), phone: phone.trim(), role },
       {
         onSuccess: (staff) => {
           toast.show(`Invitation sent to ${staff.email}. They sign in with a one-time password from the email.`);
@@ -85,6 +88,11 @@ function InviteForm({ onClose }: { onClose: () => void }) {
             <TextInput id={id} type="email" icon="mail" value={email} onChange={(e) => setEmail(e.target.value)} invalid={invalid} aria-describedby={describedBy} autoComplete="off" />
           )}
         </Field>
+        <Field label="Mobile number" hint={PHONE_HINT} error={phoneError ?? fieldErrors.phone}>
+          {({ id, describedBy, invalid }) => (
+            <TextInput id={id} type="tel" inputMode="tel" icon="phone" value={phone} onChange={(e) => setPhone(e.target.value)} invalid={invalid} aria-describedby={describedBy} autoComplete="off" placeholder="98765 43210" />
+          )}
+        </Field>
         <Field label="Role" error={fieldErrors.role}>
           {({ id, describedBy }) => <RoleSelect id={id} value={role} onChange={setRole} describedBy={describedBy} />}
         </Field>
@@ -102,23 +110,27 @@ function EditForm({ member, isSelf, onClose }: { member: StaffMember; isSelf: bo
   const update = useUpdateStaff();
   const [name, setName] = useState(member.name);
   const [role, setRole] = useState<Role>(member.role);
+  const [phone, setPhone] = useState(formatPhone(member.phone));
   const [touched, setTouched] = useState(false);
 
   const nameError = touched && name.trim().length < 2 ? "Enter a name" : undefined;
+  const phoneError = touched ? phoneProblem(phone) : undefined;
   const apiError = update.error ? toApiError(update.error) : null;
   const fieldErrors = apiError?.fields ?? {};
   const formError = apiError && !apiError.fields ? errorMessage(apiError) : null;
-  const changed = name.trim() !== member.name || role !== member.role;
+  const phoneChanged = !samePhone(phone, member.phone);
+  const changed = name.trim() !== member.name || role !== member.role || phoneChanged;
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
     setTouched(true);
-    if (name.trim().length < 2 || !changed) return;
+    if (name.trim().length < 2 || phoneProblem(phone) || !changed) return;
     update.mutate(
       {
         id: member.id,
         ...(name.trim() !== member.name ? { name: name.trim() } : {}),
         ...(role !== member.role ? { role } : {}),
+        ...(phoneChanged ? { phone: phone.trim() } : {}),
       },
       {
         onSuccess: () => {
@@ -148,6 +160,11 @@ function EditForm({ member, isSelf, onClose }: { member: StaffMember; isSelf: bo
         <Field label="Full name" error={nameError ?? fieldErrors.name}>
           {({ id, describedBy, invalid }) => (
             <TextInput id={id} value={name} onChange={(e) => setName(e.target.value)} invalid={invalid} aria-describedby={describedBy} autoFocus />
+          )}
+        </Field>
+        <Field label="Mobile number" hint={member.phone === null ? "No number saved yet. They are asked for one when they next sign in." : PHONE_HINT} error={phoneError ?? fieldErrors.phone}>
+          {({ id, describedBy, invalid }) => (
+            <TextInput id={id} type="tel" inputMode="tel" icon="phone" value={phone} onChange={(e) => setPhone(e.target.value)} invalid={invalid} aria-describedby={describedBy} autoComplete="off" placeholder="98765 43210" />
           )}
         </Field>
         <Field label="Role" error={fieldErrors.role} hint={isSelf ? "You cannot change your own role." : "Changing the role changes what they can see and do."}>

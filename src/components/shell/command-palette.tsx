@@ -91,6 +91,7 @@ function Palette({ onClose }: { onClose: () => void }) {
       }
       const actions: Array<{ label: string; icon: IconName; href: string; show: boolean }> = [
         { label: "Add a new lead", icon: "plus", href: "/leads?new=1", show: ADD_LEAD_ROLES.includes(user.role) },
+        { label: "Change my phone number", icon: "phone", href: "/phone", show: true },
         { label: "Change my password", icon: "key", href: "/change-password", show: true },
       ];
       for (const a of actions) {

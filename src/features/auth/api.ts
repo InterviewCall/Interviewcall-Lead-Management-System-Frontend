@@ -1,6 +1,6 @@
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
-import type { ChangePasswordInput, LoginInput, SessionUser } from "./types";
+import type { ChangePasswordInput, LoginInput, SessionUser, UpdatePhoneInput } from "./types";
 
 export const authKeys = { me: ["auth", "me"] as const };
 
@@ -22,6 +22,12 @@ export async function login(input: LoginInput): Promise<SessionUser> {
 
 export async function logout(): Promise<void> {
   await api.post("/auth/logout");
+}
+
+/** Saves your own phone number and returns the refreshed user. */
+export async function updateOwnPhone(input: UpdatePhoneInput): Promise<SessionUser> {
+  const { data } = await api.patch<{ user: SessionUser }>("/auth/me", input);
+  return data.user;
 }
 
 export async function changePassword(input: ChangePasswordInput): Promise<SessionUser> {

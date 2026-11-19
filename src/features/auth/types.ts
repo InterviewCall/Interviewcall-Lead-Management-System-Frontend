@@ -5,6 +5,8 @@ export interface SessionUser {
   id: string;
   name: string;
   email: string;
+  /** International form, e.g. +919876543210. Null until the person adds one. */
+  phone: string | null;
   role: Role;
   /** True while the account still has the temporary password from its invitation. */
   mustChangePassword: boolean;
@@ -13,6 +15,10 @@ export interface SessionUser {
 export interface LoginInput {
   email: string;
   password: string;
+}
+
+export interface UpdatePhoneInput {
+  phone: string;
 }
 
 export interface ChangePasswordInput {

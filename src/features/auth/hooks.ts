@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { authKeys, changePassword, login, logout } from "./api";
+import { authKeys, changePassword, login, logout, updateOwnPhone } from "./api";
 import type { SessionUser } from "./types";
 
 export function useLogin() {
@@ -18,6 +18,16 @@ export function useChangePassword() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: changePassword,
+    onSuccess: (user: SessionUser) => {
+      queryClient.setQueryData(authKeys.me, user);
+    },
+  });
+}
+
+export function useUpdateOwnPhone() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateOwnPhone,
     onSuccess: (user: SessionUser) => {
       queryClient.setQueryData(authKeys.me, user);
     },

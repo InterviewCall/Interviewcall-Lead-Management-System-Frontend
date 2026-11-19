@@ -3,7 +3,7 @@ import { ROLES, type Role } from "@/lib/roles";
 import type { InviteStaffInput, StaffListParams, StaffMember, StaffPage, StaffStatus, UpdateStaffInput } from "./types";
 
 /** The write endpoints return the changed account without the dates. */
-type StaffView = Pick<StaffMember, "id" | "name" | "email" | "role" | "status">;
+type StaffView = Pick<StaffMember, "id" | "name" | "email" | "phone" | "role" | "status">;
 
 export const staffKeys = {
   all: ["staff"] as const,

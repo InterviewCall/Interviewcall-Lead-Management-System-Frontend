@@ -1,5 +1,6 @@
 "use client";
 
+import { formatPhone } from "@/features/auth/phone";
 import { useEffect, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Avatar } from "@/components/ui/avatar";
@@ -209,19 +210,19 @@ export function TeamScreen() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] border-collapse text-left">
+              <table className="w-full min-w-[760px] border-collapse text-left">
                 <thead>
                   <tr className="h-10 border-b border-border bg-surface-alt">
-                    {["User", "Role", "Status", "Last seen", ""].map((h) => (
+                    {["User", "Phone", "Role", "Status", "Last seen", ""].map((h) => (
                       <th key={h || "actions"} className="px-4 text-small font-medium text-text-2">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {list.isPending ? (
-                    <tr><td colSpan={5} className="py-14 text-center text-text-2"><Spinner className="mx-auto text-primary" /></td></tr>
+                    <tr><td colSpan={6} className="py-14 text-center text-text-2"><Spinner className="mx-auto text-primary" /></td></tr>
                   ) : list.data && list.data.staff.length === 0 ? (
-                    <tr><td colSpan={5} className="py-14 text-center text-body text-text-2">No one matches these filters.</td></tr>
+                    <tr><td colSpan={6} className="py-14 text-center text-body text-text-2">No one matches these filters.</td></tr>
                   ) : (
                     list.data?.staff.map((member) => {
                       const status = STATUS_BADGE[member.status];
@@ -236,6 +237,9 @@ export function TeamScreen() {
                                 <span className="truncate text-small text-text-2">{member.email}</span>
                               </div>
                             </div>
+                          </td>
+                          <td className="px-4 text-small whitespace-nowrap">
+                            {member.phone ? <span className="text-text">{formatPhone(member.phone)}</span> : <span className="text-warn">Not added yet</span>}
                           </td>
                           <td className="px-4"><Badge tone={ROLE_TONE[member.role]}>{ROLE_LABEL[member.role]}</Badge></td>
                           <td className="px-4"><Badge tone={status.tone}>{status.label}</Badge></td>

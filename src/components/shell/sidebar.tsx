@@ -142,6 +142,9 @@ export function Sidebar() {
         )}
       >
         <div role="menu" className="py-1">
+          <Link role="menuitem" href="/phone" className="flex items-center gap-2.5 px-3 py-2 text-body text-text hover:bg-surface-alt">
+            <Icon name="phone" size={16} /> Phone number
+          </Link>
           <Link role="menuitem" href="/change-password" className="flex items-center gap-2.5 px-3 py-2 text-body text-text hover:bg-surface-alt">
             <Icon name="key" size={16} /> Change password
           </Link>

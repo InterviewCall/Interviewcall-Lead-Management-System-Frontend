@@ -35,7 +35,10 @@ function LoadFailed({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-/** Wraps the signed-in part of the app: sends visitors to /login, and temporary passwords to /change-password. */
+/** Where people without a phone number are sent. The API itself never blocks on it, so nobody is locked out. */
+export const PHONE_PATH = "/phone";
+
+/** Wraps the signed-in part of the app: sends visitors to /login, temporary passwords to /change-password, and accounts with no phone number to /phone. */
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { status, user, retry } = useAuth();
   const router = useRouter();
@@ -47,11 +50,13 @@ export function RequireAuth({ children }: { children: ReactNode }) {
       router.replace(`/login${next}`);
     } else if (status === "authenticated" && user?.mustChangePassword) {
       router.replace("/change-password");
+    } else if (status === "authenticated" && user?.phone === null) {
+      router.replace(PHONE_PATH);
     }
   }, [status, user, pathname, router]);
 
   if (status === "error") return <LoadFailed onRetry={retry} />;
-  if (status !== "authenticated" || !user || user.mustChangePassword) return <Splash />;
+  if (status !== "authenticated" || !user || user.mustChangePassword || user.phone === null) return <Splash />;
   return <>{children}</>;
 }
 
