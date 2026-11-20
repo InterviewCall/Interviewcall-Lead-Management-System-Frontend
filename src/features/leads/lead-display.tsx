@@ -132,10 +132,15 @@ export function AddedText({ lead }: { lead: Pick<Lead, "createdAt" | "addedBy"> 
   );
 }
 
-/** How long ago the last call or note was logged. A lead nobody has worked says so. */
-export function LastActivityText({ at }: { at: string | null }) {
+/** How long ago a person last worked the lead, and who. A lead nobody has worked says so. */
+export function LastActivityText({ at, by }: { at: string | null; by: string | null }) {
   if (!at) return <span className="text-small whitespace-nowrap text-muted">None yet</span>;
-  return <span className="text-small whitespace-nowrap text-text-2" title={new Date(at).toLocaleString("en-IN")}>{relativeTime(at)}</span>;
+  return (
+    <span className="flex flex-col" title={new Date(at).toLocaleString("en-IN")}>
+      <span className="text-small whitespace-nowrap text-text-2">{relativeTime(at)}</span>
+      {by ? <span className="max-w-[140px] truncate text-small text-muted">by {by}</span> : null}
+    </span>
+  );
 }
 
 /** The lead score with a small bar (full at 100). */

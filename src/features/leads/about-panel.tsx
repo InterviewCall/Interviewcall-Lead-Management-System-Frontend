@@ -103,7 +103,7 @@ export function AboutPanel({ lead, vsl, onEdit, onEditCustom, onChangeOwner, onM
         </Row>
         <Row label="Source">{lead.source}</Row>
         <Row label="First seen">{stamp.format(new Date(lead.createdAt))}</Row>
-        <Row label="Last activity" empty={!lead.lastActivityAt}>{lead.lastActivityAt ? relativeTime(lead.lastActivityAt) : "None yet"}</Row>
+        <Row label="Last activity" empty={!lead.lastActivityAt}>{lead.lastActivityAt ? `${relativeTime(lead.lastActivityAt)}${lead.lastActivityBy ? `, by ${lead.lastActivityBy}` : ""}` : "None yet"}</Row>
       </Section>
       <Section title="Profile" action={onEdit ? <SectionAction label="Edit" icon="edit" onClick={onEdit} ariaLabel="Edit profile" /> : null}>
         {profile.map(([label, value]) => (

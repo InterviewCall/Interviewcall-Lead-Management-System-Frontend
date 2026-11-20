@@ -26,6 +26,8 @@ export interface Lead {
   addedBy: string | null;
   /** The last call or note logged on it; null when none was. */
   lastActivityAt: string | null;
+  /** Who did it, when it was a person's stage move, call, note or task change; null when unknown. */
+  lastActivityBy: string | null;
 }
 
 export interface LeadPage {

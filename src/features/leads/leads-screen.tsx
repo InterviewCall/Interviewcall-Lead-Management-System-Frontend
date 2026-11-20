@@ -441,7 +441,7 @@ export function LeadsScreen() {
                           <td className="px-2">{lead.owner ? <span className="flex items-center gap-2"><Avatar name={lead.owner.name} size={24} /><span className="truncate text-body text-text">{lead.owner.name}</span></span> : <span className="flex items-center gap-2 text-small font-medium text-warn"><span className="size-6 rounded-full border-[1.5px] border-dashed border-warn/60" />Unassigned</span>}</td>
                           <td className="px-2"><NextStepText next={lead.next} /></td>
                           <td className="px-2"><AddedText lead={lead} /></td>
-                          <td className="px-2"><LastActivityText at={lead.lastActivityAt} /></td>
+                          <td className="px-2"><LastActivityText at={lead.lastActivityAt} by={lead.lastActivityBy} /></td>
                         </tr>
                       );
                     })
