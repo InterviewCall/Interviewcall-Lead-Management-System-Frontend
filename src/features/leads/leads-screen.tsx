@@ -24,7 +24,7 @@ import { exportLeads } from "./api";
 import { useLeadFilters, useLeads } from "./hooks";
 import { filtersOf, sameFilters, SaveViewModal, useDeleteView, useSavedViews } from "./saved-views";
 import { NewLeadModal } from "./lead-form-modal";
-import { formatPhone, LIFECYCLE, LifecycleText, NextStepText, ScoreChip, STAGE, STAGE_ORDER, StageMeter, TempChip } from "./lead-display";
+import { AddedText, formatPhone, LastActivityText, LIFECYCLE, LifecycleText, NextStepText, ScoreChip, STAGE, STAGE_ORDER, StageMeter, TempChip } from "./lead-display";
 import { BulkStageModal, BulkTaskModal } from "./bulk-actions";
 import { rememberListUrl } from "./list-url";
 import { canMark, canOnboard, CONTACT_STAGES } from "./marking";
@@ -388,7 +388,7 @@ export function LeadsScreen() {
           <>
             {/* Desktop table */}
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[980px] border-collapse text-left">
+              <table className="w-full min-w-[1180px] border-collapse text-left">
                 <thead>
                   <tr className="h-10 border-b border-border bg-surface-alt">
                     <th className="w-10 px-3">
@@ -400,7 +400,7 @@ export function LeadsScreen() {
                         className="size-[18px] accent-primary"
                       />
                     </th>
-                    {["Lead", "Source", "Contact stage", "Pipeline", "Heat", "Score", "Owner", "Next step"].map((h) => (
+                    {["Lead", "Source", "Contact stage", "Pipeline", "Heat", "Score", "Owner", "Next step", "Added", "Last activity"].map((h) => (
                       <th key={h} className="px-2 text-small font-medium text-text-2">{h}</th>
                     ))}
                   </tr>
@@ -411,11 +411,11 @@ export function LeadsScreen() {
                       <tr key={i} className="h-[64px] border-b border-border last:border-b-0">
                         <td className="px-3"><span className="block size-[18px] rounded bg-bg" /></td>
                         <td className="px-2"><span className="flex items-center gap-2.5"><span className="size-8 animate-pulse rounded-full bg-bg" /><span className="flex flex-col gap-1.5"><span className="h-3 w-32 animate-pulse rounded bg-bg" /><span className="h-2.5 w-44 animate-pulse rounded bg-bg/70" /></span></span></td>
-                        {[64, 96, 104, 56, 56, 96, 96].map((w, j) => <td key={j} className="px-2"><span className="block h-3 animate-pulse rounded bg-bg" style={{ width: w }} /></td>)}
+                        {[64, 96, 104, 56, 56, 96, 96, 84, 72].map((w, j) => <td key={j} className="px-2"><span className="block h-3 animate-pulse rounded bg-bg" style={{ width: w }} /></td>)}
                       </tr>
                     ))
                   ) : rows.length === 0 ? (
-                    <tr><td colSpan={9}><EmptyLeads /></td></tr>
+                    <tr><td colSpan={11}><EmptyLeads /></td></tr>
                   ) : (
                     rows.map((lead) => {
                       const isSelected = selected.has(lead.id);
@@ -440,6 +440,8 @@ export function LeadsScreen() {
                           <td className="px-2"><ScoreChip score={lead.score} /></td>
                           <td className="px-2">{lead.owner ? <span className="flex items-center gap-2"><Avatar name={lead.owner.name} size={24} /><span className="truncate text-body text-text">{lead.owner.name}</span></span> : <span className="flex items-center gap-2 text-small font-medium text-warn"><span className="size-6 rounded-full border-[1.5px] border-dashed border-warn/60" />Unassigned</span>}</td>
                           <td className="px-2"><NextStepText next={lead.next} /></td>
+                          <td className="px-2"><AddedText lead={lead} /></td>
+                          <td className="px-2"><LastActivityText at={lead.lastActivityAt} /></td>
                         </tr>
                       );
                     })

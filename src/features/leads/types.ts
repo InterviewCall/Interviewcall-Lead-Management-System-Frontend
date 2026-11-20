@@ -22,6 +22,10 @@ export interface Lead {
   owner: { id: string; name: string } | null;
   next: { kind: "booked" | "task" | "none"; at: string | null };
   createdAt: string;
+  /** The person who added it (a CSV import or typed in by hand); null when it arrived by itself, such as a sign-up. */
+  addedBy: string | null;
+  /** The last call or note logged on it; null when none was. */
+  lastActivityAt: string | null;
 }
 
 export interface LeadPage {
@@ -84,7 +88,6 @@ export interface LeadDetail {
     domain: string | null;
     userType: "WORKING_PROFESSIONAL" | "STUDENT" | "UNKNOWN";
     doNotContact: boolean;
-    lastActivityAt: string | null;
     lists: Array<{ id: string; name: string }>;
     customFields: Array<{ label: string; value: string }>;
     /** Every custom field this role may see, filled or not, to edit. */

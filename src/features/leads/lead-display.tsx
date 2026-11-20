@@ -1,6 +1,7 @@
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icon";
+import { formatDate, relativeTime } from "@/lib/format";
 import type { Tone } from "@/lib/roles";
 import type { Lead, LifecycleCode, StageCode, TemperatureCode } from "./types";
 
@@ -119,6 +120,22 @@ export function NextStepText({ next }: { next: Lead["next"] }) {
       {next.kind === "booked" ? `Call ${when}` : `Follow up ${when}`}
     </span>
   );
+}
+
+/** When the lead was added, and who added it when a person did (an import, or typed in by hand). */
+export function AddedText({ lead }: { lead: Pick<Lead, "createdAt" | "addedBy"> }) {
+  return (
+    <span className="flex flex-col" title={new Date(lead.createdAt).toLocaleString("en-IN")}>
+      <span className="text-small whitespace-nowrap text-text">{formatDate(lead.createdAt)}</span>
+      {lead.addedBy ? <span className="max-w-[140px] truncate text-small text-muted">by {lead.addedBy}</span> : null}
+    </span>
+  );
+}
+
+/** How long ago the last call or note was logged. A lead nobody has worked says so. */
+export function LastActivityText({ at }: { at: string | null }) {
+  if (!at) return <span className="text-small whitespace-nowrap text-muted">None yet</span>;
+  return <span className="text-small whitespace-nowrap text-text-2" title={new Date(at).toLocaleString("en-IN")}>{relativeTime(at)}</span>;
 }
 
 /** The lead score with a small bar (full at 100). */
